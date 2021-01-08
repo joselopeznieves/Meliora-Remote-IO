@@ -64,6 +64,8 @@
 // application specific includes
 #include "pinmux.h"
 
+#include "modbus.h"
+
 typedef enum{
     // Choosing -0x7D0 to avoid overlap w/ host-driver's error codes
     SOCKET_CREATE_ERROR = -0x7D0,
@@ -1036,21 +1038,22 @@ void vTestTask1( void *pvParameters )
           sl_Close(iSockID);
           ASSERT_ON_ERROR(RECV_ERROR);
         }
-        int i;
-        UART_PRINT("Message: ");
-        for(i = 0; i < 15; i++){
-
-            UART_PRINT("%u", g_cBsdBuf[i]);
-
-        }
-        UART_PRINT("\n\r");
 
 //        int i;
-//        char* response = clientHandler(g_cBsdBuf);
-//        int len = response[0];
-//        for(i = 0; i < len; i++)
-//            g_cBsdBuf[i] = response[i+1];
-//        iStatus = sl_Send(iNewSockID, g_cBsdBuf, len, 0);
+//        UART_PRINT("Message: ");
+//        for(i = 0; i < 15; i++){
+//
+//            UART_PRINT("%u", g_cBsdBuf[i]);
+//
+//        }
+//        UART_PRINT("\n\r");
+
+        int i;
+        char* response = clientHandler(g_cBsdBuf);
+        int len = response[0];
+        for(i = 0; i < len; i++)
+            g_cBsdBuf[i] = response[i+1];
+        iStatus = sl_Send(iNewSockID, g_cBsdBuf, len, 0);
         if( iStatus <= 0 )
         {
           // error
