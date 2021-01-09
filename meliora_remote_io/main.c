@@ -93,7 +93,7 @@ typedef enum{
 #define WILL_RETAIN             false
 
 /*Defining Broker IP address and port Number*/
-#define SERVER_ADDRESS           "mqtt.eclipse.org"
+#define SERVER_ADDRESS           "mqtt.eclipseprojects.io"
 #define SERVER_IP_ADDRESS        "192.168.178.67"
 #define PORT_NUMBER              1883
 #define SECURED_PORT_NUMBER      8883
@@ -118,16 +118,17 @@ typedef enum{
 #define RETAIN                  1
 
 /*Defining Publish Topic*/
-#define PUB_TOPIC_FOR_SW3       "/cc3200/ButtonPressEvtSw3"
-#define PUB_TOPIC_FOR_SW2       "/cc3200/ButtonPressEvtSw2"
+#define PUB_TOPIC_AI              "/cc3200/Meliora/vai"
+#define PUB_TOPIC_AO              "/cc3200/Meliora/vao"
 
 /*Defining Number of topics*/
-#define TOPIC_COUNT             3
+#define TOPIC_COUNT             4
 
 /*Defining Subscription Topic Values*/
-#define TOPIC1                  "/cc3200/ToggleLEDCmdL1"
-#define TOPIC2                  "/cc3200/ToggleLEDCmdL2"
-#define TOPIC3                  "/cc3200/ToggleLEDCmdL3"
+#define TOPIC_DI                  "/cc3200/Meliora/di"
+#define TOPIC_DO                  "/cc3200/Meliora/do"
+#define TOPIC_AI                  "/cc3200/Meliora/ai"
+#define TOPIC_AO                  "/cc3200/Meliora/ao"
 
 /*Defining QOS levels*/
 #define QOS0                    0
@@ -178,6 +179,7 @@ static void sl_MqttEvt(void *app_hndl,long evt, const void *buf,
 static void sl_MqttDisconnect(void *app_hndl);
 void pushButtonInterruptHandler2();
 void pushButtonInterruptHandler3();
+void maskChannels(int* masks, char* cmd);
 void ToggleLedState(ledEnum LedNum);
 void TimerPeriodicIntHandler(void);
 void LedTimerConfigNStart();
@@ -229,7 +231,7 @@ connect_config usr_connect_config[] =
         KEEP_ALIVE_TIMER,
         {Mqtt_Recv, sl_MqttEvt, sl_MqttDisconnect},
         TOPIC_COUNT,
-        {TOPIC1, TOPIC2, TOPIC3},
+        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO},
         {QOS2, QOS2, QOS2},
         {WILL_TOPIC,WILL_MSG,WILL_QOS,WILL_RETAIN},
         false
@@ -246,12 +248,17 @@ SlMqttClientLibCfg_t Mqtt_Client={
 };
 
 /*Publishing topics and messages*/
-const char *pub_topic_sw2 = PUB_TOPIC_FOR_SW2;
-const char *pub_topic_sw3 = PUB_TOPIC_FOR_SW3;
+const char *pub_topic_sw2 = PUB_TOPIC_AI;
+const char *pub_topic_sw3 = PUB_TOPIC_AO;
 unsigned char *data_sw2={"Push button sw2 is pressed on CC32XX device"};
 unsigned char *data_sw3={"Push button sw3 is pressed on CC32XX device"};
 
 void *app_hndl = (void*)usr_connect_config;
+
+int coil[4] = {0,0,0,0};
+int discrete[4] = {0,0,0,0};
+int holding[4] = {0,0,0,0};
+int input[4] = {0,0,0,0};
 
 OsiSyncObj_t sync_obj;
 
@@ -279,25 +286,31 @@ static void
 Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload,
                        long pay_len, bool dup,unsigned char qos, bool retain)
 {
-    
+
     char *output_str=(char*)malloc(top_len+1);
     memset(output_str,'\0',top_len+1);
     strncpy(output_str, (char*)topstr, top_len);
     output_str[top_len]='\0';
 
 
-    if(strncmp(output_str,TOPIC1, top_len) == 0)
+    if(strncmp(output_str,TOPIC_DO, top_len) == 0)
     {
-        ToggleLedState(LED1);
+        maskChannels(coil, (char*) payload);
     }
-    else if(strncmp(output_str,TOPIC2, top_len) == 0)
+    else if(strncmp(output_str,TOPIC_DI, top_len) == 0)
     {
-        ToggleLedState(LED2);
+        maskChannels(discrete, (char*) payload);
     }
-    else if(strncmp(output_str,TOPIC3, top_len) == 0)
+    else if(strncmp(output_str,TOPIC_AO, top_len) == 0)
     {
-        ToggleLedState(LED3);
+        maskChannels(holding, (char*) payload);
     }
+    else if(strncmp(output_str,TOPIC_AI, top_len) == 0)
+    {
+        maskChannels(input, (char*) payload);
+    }
+
+    readMask(coil, discrete, holding, input);
 
     UART_PRINT("\n\rPublish Message Received");
     UART_PRINT("\n\rTopic: ");
@@ -308,7 +321,7 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
       UART_PRINT(" [Retained]");
     if(dup)
       UART_PRINT(" [Duplicate]");
-    
+
     output_str=(char*)malloc(pay_len+1);
     memset(output_str,'\0',pay_len+1);
     strncpy(output_str, (char*)payload, pay_len);
@@ -317,7 +330,7 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     UART_PRINT("%s",(char*)output_str);
     UART_PRINT("\n\r");
     free(output_str);
-    
+
     return;
 }
 
@@ -441,6 +454,14 @@ void pushButtonInterruptHandler3()
     //
     osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
 
+}
+
+void maskChannels(int* masks, char* cmd)
+{
+    int i;
+    for(i = 3; i >=0; i--) {
+        masks[i] = cmd[3-i] - '0';
+    }
 }
 
 //****************************************************************************
@@ -647,83 +668,16 @@ extern volatile unsigned long g_ulStatus;
 //*****************************************************************************
 void MqttClient(void *pvParameters)
 {
-    
+    int value = osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
+    osi_SyncObjSignal(&sync_obj);
     long lRetVal = -1;
     int iCount = 0;
     int iNumBroker = 0;
     int iConnBroker = 0;
     event_msg RecvQue;
     unsigned char policyVal;
-    
+
     connect_config *local_con_conf = (connect_config *)app_hndl;
-
-    //
-    // Configure LED
-    //
-    GPIO_IF_LedConfigure(LED1|LED2|LED3);
-
-    GPIO_IF_LedOff(MCU_RED_LED_GPIO);
-    GPIO_IF_LedOff(MCU_GREEN_LED_GPIO);
-
-    //
-    // Reset The state of the machine
-    //
-    Network_IF_ResetMCUStateMachine();
-
-    //
-    // Start the driver
-    //
-    lRetVal = Network_IF_InitDriver(ROLE_STA);
-    if(lRetVal < 0)
-    {
-       UART_PRINT("Failed to start SimpleLink Device\n\r",lRetVal);
-       LOOP_FOREVER();
-    }
-
-    // switch on Green LED to indicate Simplelink is properly up
-    GPIO_IF_LedOn(MCU_ON_IND);
-
-    // Start Timer to blink Red LED till AP connection
-    LedTimerConfigNStart();
-
-    // Initialize AP security params
-    SecurityParams.Key = (signed char *)SECURITY_KEY;
-    SecurityParams.KeyLen = strlen(SECURITY_KEY);
-    SecurityParams.Type = SECURITY_TYPE;
-
-    //
-    // Connect to the Access Point
-    //
-    lRetVal = Network_IF_ConnectAP(SSID_NAME, SecurityParams);
-    if(lRetVal < 0)
-    {
-       UART_PRINT("Connection to an AP failed\n\r");
-       LOOP_FOREVER();
-    }
-
-    lRetVal = sl_WlanProfileAdd(SSID_NAME,strlen(SSID_NAME),0,&SecurityParams,0,1,0);
-
-    //set AUTO policy
-    lRetVal = sl_WlanPolicySet(SL_POLICY_CONNECTION,
-                      SL_CONNECTION_POLICY(1,0,0,0,0),
-                      &policyVal, 1 /*PolicyValLen*/);    
-    
-    //
-    // Disable the LED blinking Timer as Device is connected to AP
-    //
-    LedTimerDeinitStop();
-
-    //
-    // Switch ON RED LED to indicate that Device acquired an IP
-    //
-    GPIO_IF_LedOn(MCU_IP_ALLOC_IND);
-
-    UtilsDelay(20000000);
-
-    GPIO_IF_LedOff(MCU_RED_LED_GPIO);
-    GPIO_IF_LedOff(MCU_ORANGE_LED_GPIO);
-    GPIO_IF_LedOff(MCU_GREEN_LED_GPIO);
-   
     //
     // Register Push Button Handlers
     //
@@ -936,7 +890,7 @@ end:
 //!
 //*****************************************************************************
 
-void vTestTask1( void *pvParameters )
+void ModbusTask( void *pvParameters )
 {
     UART_PRINT("\r\nTCP Wait\r\n");
     int value = osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
@@ -1059,7 +1013,7 @@ void vTestTask1( void *pvParameters )
           // error
           sl_Close(iNewSockID);
           sl_Close(iSockID);
-          ASSERT_ON_ERROR(RECV_ERROR);
+          ASSERT_ON_ERROR(SEND_ERROR);
         }
     }
 }
@@ -1199,12 +1153,21 @@ void main()
     lRetVal = osi_TaskCreate(ConnectToAP,
                             (const signed char *)"Task0",
                             OSI_STACK_SIZE, NULL, 3, &handle );
+    if(lRetVal < 0)
+    {
+        ERR_PRINT(lRetVal);
+        LOOP_FOREVER();
+    }
 
-    lRetVal = osi_TaskCreate(vTestTask1, (const signed char *)"Task1",
+    lRetVal = osi_TaskCreate(ModbusTask, (const signed char *)"MODBUS",
                             OSI_STACK_SIZE, NULL, 1, NULL );
+    if(lRetVal < 0)
+    {
+        ERR_PRINT(lRetVal);
+        LOOP_FOREVER();
+    }
 
-
-    lRetVal = osi_TaskCreate(vTestTask2, (const signed char *)"Task2",
+    lRetVal = osi_TaskCreate(MqttClient, (const signed char *)"MQTT",
                             OSI_STACK_SIZE, NULL, 1, NULL );
 
     if(lRetVal < 0)

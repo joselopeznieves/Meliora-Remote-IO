@@ -18,10 +18,10 @@ int discrete_inputs[1] = {0b1010};
 int holding_registers[2*HOLDING_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x41, 0x48, 0x00, 0x00};
 int input_registers[2*INPUT_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x41, 0x48, 0x00, 0x00};
 
-int coilmask[4] = {1,1,1,1};
-int discretemask[4] = {1,1,1,1};
-int holdingmask[4] = {1,1,1,1};
-int inputmask[4] = {1,1,1,1};
+int coilmask[4] = {0,0,0,0};
+int discretemask[4] = {0,0,0,0};
+int holdingmask[4] = {0,0,0,0};
+int inputmask[4] = {0,0,0,0};
 
 /*
 Function: readBits
@@ -397,4 +397,14 @@ char* clientHandler(char buffer[]) {
     }
     }
     return 0;
+}
+
+void readMask(int* coils, int* discrete, int* holding, int* input) {
+    int i;
+    for(i = 0; i < 4; i++) {
+        coilmask[i] = coils[i];
+        discretemask[i] = discrete[i];
+        holdingmask[i] = holding[i];
+        inputmask[i] = input[i];
+    }
 }

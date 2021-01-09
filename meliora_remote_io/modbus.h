@@ -15,5 +15,6 @@ extern void writeRegister(int* registers, int address, int value);
 extern void writeMultipleBits(int* bits, int address, int amount, int* values);
 extern void writeMultipleRegisters(int* registers, int address, int amount, int* values);
 extern char* clientHandler(char* buffer);
+extern void readMask(int* discrete, int* coils, int* input, int* holding);
 
 #endif /* MODBUS_H_ */
