@@ -232,7 +232,13 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-        else return buffer;
+        else {
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
     }
     // Read values of discrete inputs
     // Each discrete input contains 1 bit of information
@@ -262,7 +268,13 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-        else return buffer;
+        else {
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
     }
     // Read values of output registers
     // Each register contains 2 bytes of information
@@ -293,7 +305,13 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-        else return buffer;
+        else {
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
     }
     // Read values of holding registers
     // Each register contains 2 bytes of information
@@ -324,7 +342,13 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-        else return buffer;
+        else {
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
     }
     // Write to a single coil
     // Each coil contains 1 bit of information
@@ -347,7 +371,13 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-        else return buffer;
+        else {
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
     }
     // Write to a single output registers
     // Each register contains 2 bytes of information
@@ -371,7 +401,13 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-        else return buffer;
+        else {
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
     }
 //    // Write to multiple coil
 //    // Each coil contains 1 bit of information
