@@ -208,21 +208,19 @@ char* clientHandler(char buffer[]) {
         response[8] = fc;
         int address = (buffer[8] << 8) | buffer[9];
         int amount = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > COILS) {
-            ec = ec | 0x02;
-        }
-        else if(amount < 1 || amount > COILS || address+amount-1 > COILS) {
-            ec = ec | 0x03;
-        }
         int maskFlag = 0;
         int start = address-1;
         int last = start+amount;
         for(i = start; i < last; i++)
             if(!coilmask[i]) maskFlag = 1;
 
-        if(maskFlag) {
+        if(maskFlag)
             ec = ec | 0x04;
-        }
+        else if(address < 1 || address > COILS)
+            ec = ec | 0x02;
+        else if(amount < 1 || amount > COILS || address+amount-1 > COILS)
+            ec = ec | 0x03;
+
         if((ec & 0x00FF) == 0) {
             int* bits = readBits(coils, address, amount);
             for(i = 0; i <= bits[0]; i++)
@@ -247,10 +245,6 @@ char* clientHandler(char buffer[]) {
         response[8] = fc;
         int address = (buffer[8] << 8) | buffer[9];
         int amount = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > DISCRETE_INPUTS)
-            ec = ec | 0x02;
-        else if(amount < 1 || amount > DISCRETE_INPUTS || address+amount-1 > DISCRETE_INPUTS)
-            ec = ec | 0x03;
         int maskFlag = 0;
         int start = address-1;
         int last = start+amount;
@@ -259,6 +253,10 @@ char* clientHandler(char buffer[]) {
 
         if(maskFlag)
             ec = ec | 0x04;
+        else if(address < 1 || address > DISCRETE_INPUTS)
+            ec = ec | 0x02;
+        else if(amount < 1 || amount > DISCRETE_INPUTS || address+amount-1 > DISCRETE_INPUTS)
+            ec = ec | 0x03;
         if((ec & 0x00FF) == 0) {
             int* bits = readBits(discrete_inputs, address, amount);
             for(i = 0; i <= bits[0]; i++)
@@ -284,10 +282,6 @@ char* clientHandler(char buffer[]) {
         response[8] = fc;
         int address = (buffer[8] << 8) | buffer[9];
         int amount = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > HOLDING_REGISTERS)
-            ec = ec | 0x02;
-        else if(amount < 1 || amount > HOLDING_REGISTERS || address+amount-1 > HOLDING_REGISTERS)
-            ec = ec | 0x03;
         int maskFlag = 0;
         int start = address-1;
         int last = start+amount;
@@ -296,6 +290,10 @@ char* clientHandler(char buffer[]) {
 
         if(maskFlag)
             ec = ec | 0x04;
+        else if(address < 1 || address > HOLDING_REGISTERS)
+            ec = ec | 0x02;
+        else if(amount < 1 || amount > HOLDING_REGISTERS || address+amount-1 > HOLDING_REGISTERS)
+            ec = ec | 0x03;
         if((ec & 0x00FF) == 0) {
             int* bits = readRegisters(holding_registers, address, amount);
             for(i = 0; i <= bits[0]; i++)
@@ -321,10 +319,6 @@ char* clientHandler(char buffer[]) {
         response[8] = fc;
         int address = (buffer[8] << 8) | buffer[9];
         int amount = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > INPUT_REGISTERS)
-            ec = ec | 0x02;
-        else if(amount < 1 || amount > INPUT_REGISTERS || address+amount-1 > INPUT_REGISTERS)
-            ec = ec | 0x03;
         int maskFlag = 0;
         int start = address-1;
         int last = start+amount;
@@ -333,6 +327,10 @@ char* clientHandler(char buffer[]) {
 
         if(maskFlag)
             ec = ec | 0x04;
+        else if(address < 1 || address > INPUT_REGISTERS)
+            ec = ec | 0x02;
+        else if(amount < 1 || amount > INPUT_REGISTERS || address+amount-1 > INPUT_REGISTERS)
+            ec = ec | 0x03;
         if((ec & 0x00FF) == 0) {
             int* bits = readRegisters(input_registers, address, amount);
             for(i = 0; i <= bits[0]; i++)
@@ -356,12 +354,12 @@ char* clientHandler(char buffer[]) {
     case 0x05: {
         int address = (buffer[8] << 8) | buffer[9];
         int value = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > COILS)
+        if(!coilmask[address])
+            ec = ec | 0x04;
+        else if(address < 1 || address > COILS)
             ec = ec | 0x02;
         else if(value != 0xFF00 && value != 0x0000)
             ec = ec | 0x03;
-        else if(!coilmask[address])
-            ec = ec | 0x04;
         if(ec & 0x00FF == 0) {
             writeBit(coils, address, value);
             len = 12;
@@ -386,12 +384,12 @@ char* clientHandler(char buffer[]) {
     case 0x06: {
         int address = (buffer[8] << 8) | buffer[9];
         int value = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > COILS)
+        if(!holdingmask[address])
+            ec = ec | 0x04;
+        else if(address < 1 || address > COILS)
             ec = ec | 0x02;
         else if(value < 0x0000 || value > 0xFFFF)
             ec = ec | 0x03;
-        else if(!holdingmask[address])
-            ec = ec | 0x04;
         if(ec & 0x00FF == 0) {
             writeRegister(holding_registers, address, value);
             len = 12;
