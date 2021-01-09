@@ -235,8 +235,10 @@ char* clientHandler(char buffer[]) {
             response[0] = len;
             return response;
         }
-exception01:
+
         else {
+exception01:
+
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
@@ -278,8 +280,8 @@ exception01:
             response[0] = len;
             return response;
         }
-exception02:
         else {
+exception02:
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
@@ -322,8 +324,8 @@ exception02:
             response[0] = len;
             return response;
         }
-exception03:
         else {
+exception03:
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
@@ -366,8 +368,8 @@ exception03:
             response[0] = len;
             return response;
         }
-exception04:
         else {
+exception04:
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
@@ -389,11 +391,11 @@ exception04:
             ec = ec | 0x03;
             goto exception05;
         }
-        else if(!coilmask[address]) {
+        else if(!coilmask[address-1]) {
             ec = ec | 0x04;
             goto exception05;
         }
-        if(ec & 0x00FF == 0) {
+        if((ec & 0x00FF) == 0) {
             writeBit(coils, address, value);
             len = 12;
             int i;
@@ -402,8 +404,8 @@ exception04:
             response[0] = len;
             return response;
         }
-exception05:
         else {
+exception05:
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
@@ -426,11 +428,11 @@ exception05:
             ec = ec | 0x03;
             goto exception06;
         }
-        else if(!holdingmask[address]) {
+        else if(!holdingmask[address-1]) {
             ec = ec | 0x04;
             goto exception06;
         }
-        if(ec & 0x00FF == 0) {
+        if((ec & 0x00FF) == 0) {
             writeRegister(holding_registers, address, value);
             len = 12;
             int i;
@@ -439,8 +441,8 @@ exception05:
             response[0] = len;
             return response;
         }
-exception06:
         else {
+exception06:
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
