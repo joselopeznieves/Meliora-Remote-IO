@@ -292,7 +292,7 @@ exception02:
             return response;
         }
     }
-    // Read values of output registers
+    // Read values of holding registers
     // Each register contains 2 bytes of information
     // Each space in the data array contains 1 byte of a register
     // stored in a Big-endian format
@@ -336,7 +336,7 @@ exception03:
             return response;
         }
     }
-    // Read values of holding registers
+    // Read values of input registers
     // Each register contains 2 bytes of information
     // Each space in the data array contains 1 byte of a register
     // stored in a Big-endian format
@@ -405,6 +405,7 @@ exception04:
             for(i = 0; i < len; i++)
                 response[i+1] = buffer[i];
             response[0] = len;
+            response[6] = buffer[5]-2;
             return response;
         }
         else {
@@ -416,7 +417,7 @@ exception05:
             return response;
         }
     }
-    // Write to a single output registers
+    // Write to a single holding registers
     // Each register contains 2 bytes of information
     // Each space in the data array contains 1 byte of a register
     // stored in a Big-endian format
@@ -442,6 +443,7 @@ exception05:
             for(i = 0; i < len; i++)
                 response[i+1] = buffer[i];
             response[0] = len;
+            response[6] = buffer[5]-2;
             return response;
         }
         else {
@@ -523,12 +525,13 @@ exception0F:
             goto exception10;
         }
         if((ec & 0x00FF) == 0) {
-            for(i = 12; i < buffer[5]+5; i++)
-                values[i-12] = buffer[i];
+            for(i = 0; i < buffer[12]; i++)
+                values[i] = buffer[i+13];
             writeMultipleRegisters(holding_registers, address, amount, values);
             response[0] = buffer[5]+3;
             for(i = 0; i < response[0]; i++)
                 response[i+1] = buffer[i];
+            response[6] = 6;
             return response;
         }
         else {
