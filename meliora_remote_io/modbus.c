@@ -135,20 +135,23 @@ Parameters:
     values -> Array of values to be stored
  */
 void writeMultipleBits(int* bits, int start, int amount, int* values) {
-    //    int end = start+amount;
-    //    int count = 0;
-    //    int val = 0;
-    //    int i, shift;
-    //    for(i = start; i < end; i++) {
-    //        for(shift = 0; shift < 4; shift) {
-    //            val = (values[count] >> shift) & 0x01;
-    //            if(val == 0x01)
-    //                writeBit(data, i, 0xFF00);
-    //            else
-    //                writeBit(data, i, 0x0000);
-    //        }
-    //        count++;
-    //    }
+    int end = start+amount;
+    int count = amount/8;
+    int val = 0;
+    int j = 0;
+    int i, shift = 0;
+    for(i = start; i < end; i++) {
+        val = (values[j] >> shift) & 0x01;
+        if(val == 0x01)
+            writeBit(bits, i, 0xFF00);
+        else
+            writeBit(bits, i, 0x0000);
+        shift++;
+        if(shift >= 8 && j < count) {
+            shift = 0;
+            j++;
+        }
+    }
 }
 
 /*
@@ -165,8 +168,8 @@ Parameters:
 void writeMultipleRegisters(int* registers, int start, int amount, int* values) {
     int end = start+2*amount;
     int index = 0, i;
-    for(i = start; i < end; i++) {
-        registers[i-1] = values[index];
+    for(i = start-1; i < end; i++) {
+        registers[i] = values[index];
         index++;
     }
 }
@@ -189,7 +192,8 @@ Parameters:
 char* clientHandler(char buffer[]) {
     char* response = (char*) malloc(300*sizeof(char));
     int len = 7;
-    int i;
+    int i, address, amount, value, maskFlag, start, last;
+    int* values = (int*) malloc(20*sizeof(int));
 
     // Copy MBAP Header
     // NOTE: length field must be changed before sending message, unless it is a write
@@ -206,8 +210,8 @@ char* clientHandler(char buffer[]) {
     // Each space in the data array contains 8 coils
     case 0x01: {
         response[8] = fc;
-        int address = (buffer[8] << 8) | buffer[9];
-        int amount = (buffer[10] << 8) | buffer[11];
+        address = (buffer[8] << 8) | buffer[9];
+        amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
             goto exception01;
@@ -216,9 +220,9 @@ char* clientHandler(char buffer[]) {
             ec = ec | 0x03;
             goto exception01;
         }
-        int maskFlag = 0;
-        int start = address-1;
-        int last = start+amount;
+        maskFlag = 0;
+        start = address-1;
+        last = start+amount;
         for(i = start; i < last; i++)
             if(!coilmask[i]) maskFlag = 1;
 
@@ -238,7 +242,6 @@ char* clientHandler(char buffer[]) {
 
         else {
 exception01:
-
             response[0] = 9;
             response[6] = 0x03;
             response[8] = (ec & 0xFF00) >> 8;
@@ -251,8 +254,8 @@ exception01:
     // Each space in the data array contains 8 discrete inputs
     case 0x02: {
         response[8] = fc;
-        int address = (buffer[8] << 8) | buffer[9];
-        int amount = (buffer[10] << 8) | buffer[11];
+        address = (buffer[8] << 8) | buffer[9];
+        amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > DISCRETE_INPUTS) {
             ec = ec | 0x02;
             goto exception02;
@@ -261,9 +264,9 @@ exception01:
             ec = ec | 0x03;
             goto exception02;
         }
-        int maskFlag = 0;
-        int start = address-1;
-        int last = start+amount;
+        maskFlag = 0;
+        start = address-1;
+        last = start+amount;
         for(i = start; i < last; i++)
             if(!discretemask[i]) maskFlag = 1;
 
@@ -295,8 +298,8 @@ exception02:
     // stored in a Big-endian format
     case 0x03: {
         response[8] = fc;
-        int address = (buffer[8] << 8) | buffer[9];
-        int amount = (buffer[10] << 8) | buffer[11];
+        address = (buffer[8] << 8) | buffer[9];
+        amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > HOLDING_REGISTERS) {
             ec = ec | 0x02;
             goto exception03;
@@ -305,9 +308,9 @@ exception02:
             ec = ec | 0x03;
             goto exception03;
         }
-        int maskFlag = 0;
-        int start = address-1;
-        int last = start+amount;
+        maskFlag = 0;
+        start = address-1;
+        last = start+amount;
         for(i = start; i < last; i++)
             if(!holdingmask[i]) maskFlag = 1;
 
@@ -339,8 +342,8 @@ exception03:
     // stored in a Big-endian format
     case 0x04: {
         response[8] = fc;
-        int address = (buffer[8] << 8) | buffer[9];
-        int amount = (buffer[10] << 8) | buffer[11];
+        address = (buffer[8] << 8) | buffer[9];
+        amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > INPUT_REGISTERS) {
             ec = ec | 0x02;
             goto exception04;
@@ -349,9 +352,9 @@ exception03:
             ec = ec | 0x03;
             goto exception04;
         }
-        int maskFlag = 0;
-        int start = address-1;
-        int last = start+amount;
+        maskFlag = 0;
+        start = address-1;
+        last = start+amount;
         for(i = start; i < last; i++)
             if(!inputmask[i]) maskFlag = 1;
 
@@ -381,8 +384,9 @@ exception04:
     // Each coil contains 1 bit of information
     // Each space in the data array contains 8 coils
     case 0x05: {
-        int address = (buffer[8] << 8) | buffer[9];
-        int value = (buffer[10] << 8) | buffer[11];
+        response[8] = fc;
+        address = (buffer[8] << 8) | buffer[9];
+        value = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
             goto exception05;
@@ -398,7 +402,6 @@ exception04:
         if((ec & 0x00FF) == 0) {
             writeBit(coils, address, value);
             len = 12;
-            int i;
             for(i = 0; i < len; i++)
                 response[i+1] = buffer[i];
             response[0] = len;
@@ -418,8 +421,9 @@ exception05:
     // Each space in the data array contains 1 byte of a register
     // stored in a Big-endian format
     case 0x06: {
-        int address = (buffer[8] << 8) | buffer[9];
-        int value = (buffer[10] << 8) | buffer[11];
+        response[8] = fc;
+        address = (buffer[8] << 8) | buffer[9];
+        value = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
             goto exception06;
@@ -435,7 +439,6 @@ exception05:
         if((ec & 0x00FF) == 0) {
             writeRegister(holding_registers, address, value);
             len = 12;
-            int i;
             for(i = 0; i < len; i++)
                 response[i+1] = buffer[i];
             response[0] = len;
@@ -450,24 +453,93 @@ exception06:
             return response;
         }
     }
-//    // Write to multiple coil
-//    // Each coil contains 1 bit of information
-//    // Each space in the data array contains 8 coils
-//    case 0x0F:
-//        if(address < 1 || address > 48 || amount < 1 || amount > 48 || address+amount-1 > 48)
-//            break;
-//        writeMultipleBits(data, address, amount, values);
-//        break;
-//
-//    // Write to multiple output registers
-//    // Each register contains 2 bytes of information
-//    // Each space in the data array contains 1 byte of a register
-//    // stored in a Big-endian format
-//    case 0x10:
-//        if(address < 1 || address > 3 || amount < 1 || amount > 3 || address+amount-1 > 3)
-//            break;
-//        writeMultipleRegisters(data, address, amount, values);
-//        break;
+    // Write to multiple coil
+    // Each coil contains 1 bit of information
+    // Each space in the data array contains 8 coils
+    case 0x0F: {
+        response[8] = fc;
+        address = (buffer[8] << 8) | buffer[9];
+        amount = (buffer[10] << 8) | buffer[11];
+        if(address < 1 || address > COILS) {
+            ec = ec | 0x02;
+            goto exception0F;
+        }
+        else if(amount < 1 || address+amount-1 > COILS) {
+            ec = ec | 0x03;
+            goto exception0F;
+        }
+        maskFlag = 0;
+        start = address-1;
+        last = start+amount;
+        for(i = start; i < last; i++)
+            if(!holdingmask[i]) maskFlag = 1;
+
+        if(maskFlag) {
+            ec = ec | 0x04;
+            goto exception10;
+        }
+        if((ec & 0x00FF) == 0) {
+            for(i = 12; i < buffer[5]+5; i++)
+                values[i-12] = buffer[i];
+            writeMultipleBits(data, address, amount, values);
+            response[0] = buffer[5]+3;
+            for(i = 0; i < response[0]; i++)
+                response[i+1] = buffer[i];
+            return response;
+        }
+        else {
+exception0F:
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
+    }
+    // Write to multiple output registers
+    // Each register contains 2 bytes of information
+    // Each space in the data array contains 1 byte of a register
+    // stored in a Big-endian format
+    case 0x10: {
+        response[8] = fc;
+        address = (buffer[8] << 8) | buffer[9];
+        amount = (buffer[10] << 8) | buffer[11];
+        if(address < 1 || address > HOLDING_REGISTERS) {
+            ec = ec | 0x02;
+            goto exception10;
+        }
+        else if(amount < 1 || address+amount-1 > HOLDING_REGISTERS) {
+            ec = ec | 0x03;
+            goto exception10;
+        }
+        maskFlag = 0;
+        start = address-1;
+        last = start+amount;
+        for(i = start; i < last; i++)
+            if(!holdingmask[i]) maskFlag = 1;
+
+        if(maskFlag) {
+            ec = ec | 0x04;
+            goto exception10;
+        }
+        if((ec && 0x00FF) == 0) {
+            for(i = 12; i < buffer[5]+5; i++)
+                values[i-12] = buffer[i];
+            writeMultipleRegisters(data, address, amount, values);
+            response[0] = buffer[5]+3;
+            for(i = 0; i < response[0]; i++)
+                response[i+1] = buffer[i];
+            return response;
+        }
+        else {
+exception10:
+            response[0] = 9;
+            response[6] = 0x03;
+            response[8] = (ec & 0xFF00) >> 8;
+            response[9] = ec & 0x00FF;
+            return response;
+        }
+    }
     default:
     {
         break;
