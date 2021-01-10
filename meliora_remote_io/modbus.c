@@ -522,7 +522,7 @@ exception0F:
             ec = ec | 0x04;
             goto exception10;
         }
-        if((ec && 0x00FF) == 0) {
+        if((ec & 0x00FF) == 0) {
             for(i = 12; i < buffer[5]+5; i++)
                 values[i-12] = buffer[i];
             writeMultipleRegisters(holding_registers, address, amount, values);
