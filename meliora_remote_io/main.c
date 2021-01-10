@@ -862,7 +862,7 @@ connect_to_broker:
                 //
                 // device not connected to any broker
                 //
-                goto end;
+                goto connect_to_broker;
             }
         }
     }
