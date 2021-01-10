@@ -472,11 +472,11 @@ exception06:
         start = address-1;
         last = start+amount;
         for(i = start; i < last; i++)
-            if(!holdingmask[i]) maskFlag = 1;
+            if(!coilmask[i]) maskFlag = 1;
 
         if(maskFlag) {
             ec = ec | 0x04;
-            goto exception10;
+            goto exception0F;
         }
         if((ec & 0x00FF) == 0) {
             for(i = 12; i < buffer[5]+5; i++)
