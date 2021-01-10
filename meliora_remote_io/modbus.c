@@ -166,10 +166,11 @@ Parameters:
     amount -> Amount of Output Registers to be modified
     values -> Array of values to be stored
  */
-void writeMultipleRegisters(int* registers, int start, int amount, int* values) {
-    int end = start+2*amount-1;
+void writeMultipleRegisters(int* registers, int address, int amount, int* values) {
+    int start = (address-1) << 1;
+    int end = start+(amount << 1);
     int index = 0, i;
-    for(i = start-1; i < end; i++) {
+    for(i = start; i < end; i++) {
         registers[i] = values[index];
         index++;
     }
