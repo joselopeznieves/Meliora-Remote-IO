@@ -910,6 +910,7 @@ void ModbusTask( void *pvParameters )
     unsigned short usPort = 502;
 
     UART_PRINT("\r\nTCP Task\r\n");
+reset_tcp:
 
     // filling the buffer
     for (iCounter=0 ; iCounter<BUF_SIZE ; iCounter++)
@@ -929,7 +930,7 @@ void ModbusTask( void *pvParameters )
     if( iSockID < 0 )
     {
         // error
-        ASSERT_ON_ERROR(SOCKET_CREATE_ERROR);
+        goto reset_tcp;
     }
 
     iAddrSize = sizeof(SlSockAddrIn_t);
@@ -940,7 +941,7 @@ void ModbusTask( void *pvParameters )
     {
         // error
         sl_Close(iSockID);
-        ASSERT_ON_ERROR(BIND_ERROR);
+        goto reset_tcp;
     }
 
     // putting the socket for listening to the incoming TCP connection
@@ -948,7 +949,7 @@ void ModbusTask( void *pvParameters )
     if( iStatus < 0 )
     {
         sl_Close(iSockID);
-        ASSERT_ON_ERROR(LISTEN_ERROR);
+        goto reset_tcp;
     }
 
     // setting socket option to make the socket as non blocking
@@ -957,7 +958,7 @@ void ModbusTask( void *pvParameters )
     if( iStatus < 0 )
     {
         sl_Close(iSockID);
-        ASSERT_ON_ERROR(SOCKET_OPT_ERROR);
+        goto reset_tcp;
     }
     iNewSockID = SL_EAGAIN;
 
@@ -977,7 +978,7 @@ void ModbusTask( void *pvParameters )
             // error
             sl_Close(iNewSockID);
             sl_Close(iSockID);
-            ASSERT_ON_ERROR(ACCEPT_ERROR);
+            goto reset_tcp;
         }
     }
 
@@ -990,17 +991,8 @@ void ModbusTask( void *pvParameters )
           // error
           sl_Close(iNewSockID);
           sl_Close(iSockID);
-          ASSERT_ON_ERROR(RECV_ERROR);
+          goto reset_tcp;
         }
-
-//        int i;
-//        UART_PRINT("Message: ");
-//        for(i = 0; i < 15; i++){
-//
-//            UART_PRINT("%u", g_cBsdBuf[i]);
-//
-//        }
-//        UART_PRINT("\n\r");
 
         int i;
         char* response = clientHandler(g_cBsdBuf);
@@ -1013,7 +1005,7 @@ void ModbusTask( void *pvParameters )
           // error
           sl_Close(iNewSockID);
           sl_Close(iSockID);
-          ASSERT_ON_ERROR(SEND_ERROR);
+          goto reset_tcp;
         }
     }
 }

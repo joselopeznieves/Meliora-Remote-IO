@@ -481,7 +481,7 @@ exception06:
         if((ec & 0x00FF) == 0) {
             for(i = 12; i < buffer[5]+5; i++)
                 values[i-12] = buffer[i];
-            writeMultipleBits(data, address, amount, values);
+            writeMultipleBits(coils, address, amount, values);
             response[0] = buffer[5]+3;
             for(i = 0; i < response[0]; i++)
                 response[i+1] = buffer[i];
@@ -525,7 +525,7 @@ exception0F:
         if((ec && 0x00FF) == 0) {
             for(i = 12; i < buffer[5]+5; i++)
                 values[i-12] = buffer[i];
-            writeMultipleRegisters(data, address, amount, values);
+            writeMultipleRegisters(holding_registers, address, amount, values);
             response[0] = buffer[5]+3;
             for(i = 0; i < response[0]; i++)
                 response[i+1] = buffer[i];
