@@ -62,7 +62,7 @@
 #include "sl_mqtt_client.h"
 
 // application specific includes
-#include "pinmux.h"
+#include "pin_mux.h"
 
 #include "modbus.h"
 
