@@ -139,7 +139,8 @@ void writeMultipleBits(int* bits, int start, int amount, int* values) {
     int count = amount/8;
     int val = 0;
     int j = 0;
-    int i, shift = 0;
+    int i;
+    int shift = (start-1)%8;
     for(i = start; i < end; i++) {
         val = (values[j] >> shift) & 0x01;
         if(val == 0x01)
@@ -166,7 +167,7 @@ Parameters:
     values -> Array of values to be stored
  */
 void writeMultipleRegisters(int* registers, int start, int amount, int* values) {
-    int end = start+2*amount;
+    int end = start+2*amount-1;
     int index = 0, i;
     for(i = start-1; i < end; i++) {
         registers[i] = values[index];
@@ -481,12 +482,13 @@ exception06:
             goto exception0F;
         }
         if((ec & 0x00FF) == 0) {
-            for(i = 12; i < buffer[5]+5; i++)
-                values[i-12] = buffer[i];
+            for(i = 0; i < buffer[12]; i++)
+                values[i] = buffer[i+13];
             writeMultipleBits(coils, address, amount, values);
-            response[0] = buffer[5]+3;
+            response[0] = 12;
             for(i = 0; i < response[0]; i++)
                 response[i+1] = buffer[i];
+            response[6] = 6;
             return response;
         }
         else {
@@ -528,7 +530,7 @@ exception0F:
             for(i = 0; i < buffer[12]; i++)
                 values[i] = buffer[i+13];
             writeMultipleRegisters(holding_registers, address, amount, values);
-            response[0] = buffer[5]+3;
+            response[0] = 12;
             for(i = 0; i < response[0]; i++)
                 response[i+1] = buffer[i];
             response[6] = 6;
@@ -545,10 +547,9 @@ exception10:
     }
     default:
     {
-        break;
+        return 0;
     }
     }
-    return 0;
 }
 
 void readMask(int* coils, int* discrete, int* holding, int* input) {
