@@ -6,6 +6,7 @@
  */
 #include "stdlib.h"
 #include "modbus.h"
+#include "channel_interface.h"
 
 #define COILS                     4
 #define DISCRETE_INPUTS           4
@@ -14,7 +15,7 @@
 
 
 int coils[1] = {0b1010};
-int discrete_inputs[1] = {0b1010};
+int discrete_inputs[1] = {0};
 int holding_registers[2*HOLDING_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x41, 0x48, 0x00, 0x00};
 int input_registers[2*INPUT_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x41, 0x48, 0x00, 0x00};
 
@@ -100,6 +101,9 @@ void writeBit(int* bits, int address, int value) {
     bits[index] = bits[index] & (0xFF ^ (1 << shift));
     if(value == 0xFF00)
         bits[index] = bits[index] | (0x01 << shift);
+    int channel = (index << 3)+shift;
+    int state = (value >> 8) & 0x01;
+    WriteDigitalOutput(channel, state);
 }
 
 /*
@@ -174,6 +178,27 @@ void writeMultipleRegisters(int* registers, int address, int amount, int* values
         registers[i] = values[index];
         index++;
     }
+}
+
+/*
+Helper functions
+
+Function: instant_read
+
+Description: Read the values at the Digital input channels of the Microcontroller
+
+Parameters:
+    start -> starting address for channels to be read
+    end -> last address for channels to be read
+ */
+int instant_read(int start, int end) {
+    int value = 0;
+    int i;
+    for(i = start; i < end; i++) {
+        int bit = ReadDigitalInput(i);
+        value = value | (bit << i);
+    }
+    return value;
 }
 
 /*
@@ -277,6 +302,7 @@ exception01:
             goto exception02;
         }
         if((ec & 0x00FF) == 0) {
+            discrete_inputs[0] = instant_read(start, last);
             int* bits = readBits(discrete_inputs, address, amount);
             for(i = 0; i <= bits[0]; i++)
                 response[9+i] = bits[i];
