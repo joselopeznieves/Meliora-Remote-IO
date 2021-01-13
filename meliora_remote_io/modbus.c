@@ -243,10 +243,10 @@ void instant_readAnalog() {
             value = scale(autoScaling[i][0], autoScaling[i][1], autoScaling[i][2], autoScaling[i][3], read); // [-24,24]
         }
         memcpy(float2int, &value, sizeof(float2int));
-        input_registers[4*i] = (float2int[1] & 0xFF00) >> 8;
-        input_registers[4*i+1] = (float2int[1] & 0x00FF);
-        input_registers[4*i+2] = (float2int[0] & 0xFF00) >> 8;
-        input_registers[4*i+3] = (float2int[0] & 0x00FF);
+        input_registers[4*i] = (float2int[0] & 0xFF00) >> 8;
+        input_registers[4*i+1] = (float2int[0] & 0x00FF);
+        input_registers[4*i+2] = (float2int[1] & 0xFF00) >> 8;
+        input_registers[4*i+3] = (float2int[1] & 0x00FF);
     }
 }
 
