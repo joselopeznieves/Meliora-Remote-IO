@@ -202,6 +202,15 @@ void writeMultipleRegisters(int* registers, int address, int amount, int* values
         registers[i] = values[index];
         index++;
     }
+    short upper, lower;
+    float voltage = 0.0;
+    for(i = 0; i < 4; i++) {
+        upper = (registers[4*i] << 8) | registers[4*i+1];
+        lower = (registers[4*i+2] << 8) | registers[4*i+3];
+        short bits[2] = {upper, lower};
+        memcpy(&voltage, bits, sizeof(voltage));
+        WriteAnalogOutput(i, voltage);
+    }
 }
 
 /********************
@@ -585,7 +594,7 @@ exception0F:
         response[8] = fc;
         address = (buffer[8] << 8) | buffer[9];
         amount = (buffer[10] << 8) | buffer[11];
-        if(address < 1 || address > HOLDING_REGISTERS) {
+        if(address < 1 || address > HOLDING_REGISTERS || (address+1)%2) {
             ec = ec | 0x02;
             goto exception10;
         }
@@ -651,77 +660,6 @@ void saveAutoScaling(char* message) {
           autoScaling[channel][i] = atof(token);
           token = strtok(NULL, ",");
        }
-}
-
-float int2float(int value) {
-    // handles all values from [-2^24...2^24]
-    // outside this range only some integers may be represented exactly
-    // this method will use truncation 'rounding mode' during conversion
-
-    // we can safely reinterpret it as 0.0
-    if (value == 0) return 0.0;
-
-    if (value == (1U<<31)) // ie -2^31
-    {
-        // -(-2^31) = -2^31 so we'll not be able to handle it below - use const
-        // value = 0xCF000000;
-        return (float) 0xCF000000;  // *((float*)&value); is undefined behaviour
-    }
-
-    int sign = 0;
-
-    // handle negative values
-    if (value < 0)
-    {
-        sign = 1U << 31;
-        value = -value;
-    }
-
-    // although right shift of signed is undefined - all compilers (that I know) do
-    // arithmetic shift (copies sign into MSB) is what I prefer here
-    // hence using unsigned abs_value_copy for shift
-    unsigned int abs_value_copy = value;
-
-    // find leading one
-    int bit_num = 31;
-    int shift_count = 0;
-
-    for(; bit_num > 0; bit_num--)
-    {
-        if (abs_value_copy & (1U<<bit_num))
-        {
-            if (bit_num >= 23)
-            {
-                // need to shift right
-                shift_count = bit_num - 23;
-                abs_value_copy >>= shift_count;
-            }
-            else
-            {
-                // need to shift left
-                shift_count = 23 - bit_num;
-                abs_value_copy <<= shift_count;
-            }
-            break;
-        }
-    }
-
-    // exponent is biased by 127
-    int exp = bit_num + 127;
-
-    // clear leading 1 (bit #23) (it will implicitly be there but not stored)
-    int coeff = abs_value_copy & ~(1<<23);
-
-    // move exp to the right place
-    exp <<= 23;
-
-    union
-    {
-        int rint;
-        float rfloat;
-    }ret = { sign | exp | coeff };
-
-    return ret.rfloat;
 }
 
 unsigned char* sendRegisterValues(int state) {
