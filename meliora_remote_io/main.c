@@ -66,6 +66,8 @@
 
 #include "modbus.h"
 
+//#include "channel_interface.h"
+
 typedef enum{
     // Choosing -0x7D0 to avoid overlap w/ host-driver's error codes
     SOCKET_CREATE_ERROR = -0x7D0,
@@ -122,7 +124,7 @@ typedef enum{
 #define PUB_TOPIC_AO              "/cc3200/Meliora/vao"
 
 /*Defining Number of topics*/
-#define TOPIC_COUNT             9
+#define TOPIC_COUNT             10
 
 /*Defining Subscription Topic Values*/
 #define TOPIC_DI                  "/cc3200/Meliora/di"
@@ -132,11 +134,12 @@ typedef enum{
 #define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
 #define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
 #define TOPIC_AO_SI               "/cc3200/Meliora/ao/slopeintercept"
+#define TOPIC_UDMA                "/cc3200/Meliora/udma"
 #define TOPIC_AI_FLAG             "/cc3200/Meliora/flagvai"
 #define TOPIC_AO_FLAG             "/cc3200/Meliora/flagvao"
 char* const CHANNELS[4] = {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO};
 char* const AS_SI[3] = {TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI};
-char* const FLAG[2] = {TOPIC_AI_FLAG, TOPIC_AO_FLAG};
+char* const FLAG[3] = {TOPIC_UDMA, TOPIC_AI_FLAG, TOPIC_AO_FLAG};
 
 /*Defining QOS levels*/
 #define QOS0                    0
@@ -241,8 +244,8 @@ connect_config usr_connect_config[] =
         KEEP_ALIVE_TIMER,
         {Mqtt_Recv, sl_MqttEvt, sl_MqttDisconnect},
         TOPIC_COUNT,
-        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI},
-        {QOS2, QOS2, QOS2},
+        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI, TOPIC_UDMA, TOPIC_AI_FLAG, TOPIC_AO_FLAG},
+        {QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2},
         {WILL_TOPIC,WILL_MSG,WILL_QOS,WILL_RETAIN},
         false
     }
@@ -330,6 +333,10 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     else if(strncmp(output_str,TOPIC_AI_SI, top_len) == 0)
     {
 
+    }
+    else if(strncmp(output_str, TOPIC_UDMA, top_len) == 0)
+    {
+        save_udma((char*) payload);
     }
     else if(strncmp(output_str,TOPIC_AO_FLAG, top_len) == 0)
     {

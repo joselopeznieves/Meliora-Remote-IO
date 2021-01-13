@@ -15,6 +15,7 @@
 #define INPUT_REGISTERS           8
 #define ANALOG_CHANNELS           4
 #define SCALING_PARAMETERS        4
+#define UDMA                      4
 
 /*
  * MODBUS Data Types
@@ -23,20 +24,20 @@
  * holding registers -> Analog Outputs
  * input registers -> Analog Inputs
  */
-int coils[1];
-int discrete_inputs[1];
-int holding_registers[2*HOLDING_REGISTERS] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-int input_registers[2*INPUT_REGISTERS] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+int coils[1] = {0};
+int discrete_inputs[1] = {0};
+int holding_registers[2*HOLDING_REGISTERS] = {0};
+int input_registers[2*INPUT_REGISTERS] = {0};
 
 /*
  * State of channels
  * 0 -> channel is off
  * 1 -> channel is on
  */
-int coilmask[COILS] = {0,0,0,0};
-int discretemask[DISCRETE_INPUTS] = {0,0,0,0};
-int holdingmask[HOLDING_REGISTERS] = {0,0,0,0,0,0,0,0};
-int inputmask[INPUT_REGISTERS] = {0,0,0,0,0,0,0,0};
+int coilmask[COILS] = {0};
+int discretemask[DISCRETE_INPUTS] = {0};
+int holdingmask[HOLDING_REGISTERS] = {0};
+int inputmask[INPUT_REGISTERS] = {0};
 
 /*
  * Initialize auto-scaling with default values
@@ -48,6 +49,15 @@ float autoScaling[ANALOG_CHANNELS][SCALING_PARAMETERS] = {{0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0}};
+
+/*
+ * 0 -> Digital Inputs
+ * 1 -> Digital Outputs
+ * 2 -> Analog Inputs
+ * 3 -> Analog Outputs
+ */
+int udma[UDMA] = {10000, 00000, 40000, 30000};
+
 /*
 Function: readBits
 
@@ -295,7 +305,7 @@ char* clientHandler(char buffer[]) {
     // Each space in the data array contains 8 coils
     case 0x01: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[1];
         amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
@@ -339,7 +349,7 @@ exception01:
     // Each space in the data array contains 8 discrete inputs
     case 0x02: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[0];
         amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > DISCRETE_INPUTS) {
             ec = ec | 0x02;
@@ -384,7 +394,7 @@ exception02:
     // stored in a Big-endian format
     case 0x03: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[3];
         amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > HOLDING_REGISTERS) {
             ec = ec | 0x02;
@@ -428,7 +438,7 @@ exception03:
     // stored in a Big-endian format
     case 0x04: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[2];
         amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > INPUT_REGISTERS) {
             ec = ec | 0x02;
@@ -472,7 +482,7 @@ exception04:
     // Each space in the data array contains 8 coils
     case 0x05: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[1];
         value = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
@@ -510,7 +520,7 @@ exception05:
     // stored in a Big-endian format
     case 0x06: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[3];
         value = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
@@ -547,8 +557,9 @@ exception06:
     // Each space in the data array contains 8 coils
     case 0x0F: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[1];
         amount = (buffer[10] << 8) | buffer[11];
+        // udma address shift
         if(address < 1 || address > COILS) {
             ec = ec | 0x02;
             goto exception0F;
@@ -592,7 +603,7 @@ exception0F:
     // stored in a Big-endian format
     case 0x10: {
         response[8] = fc;
-        address = (buffer[8] << 8) | buffer[9];
+        address = ((buffer[8] << 8) | buffer[9])-udma[3];
         amount = (buffer[10] << 8) | buffer[11];
         if(address < 1 || address > HOLDING_REGISTERS || (address+1)%2) {
             ec = ec | 0x02;
@@ -660,6 +671,15 @@ void saveAutoScaling(char* message) {
           autoScaling[channel][i] = atof(token);
           token = strtok(NULL, ",");
        }
+}
+
+void save_udma(char* message) {
+    char* token = strtok(message, ",");
+    int i;
+    for(i = 0; i < 4; i++) {
+        udma[i] = atoi(token)-1;
+        token = strtok(NULL, ",");
+    }
 }
 
 unsigned char* sendRegisterValues(int state) {
