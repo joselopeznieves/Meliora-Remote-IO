@@ -131,7 +131,7 @@ typedef enum{
 #define TOPIC_AO                  "/cc3200/Meliora/ao"
 #define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
 #define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
-#define TOPIC_AO_AS               "/cc3200/Meliora/ao/slopeintercept"
+#define TOPIC_AO_SI               "/cc3200/Meliora/ao/slopeintercept"
 #define TOPIC_AI_FLAG             "/cc3200/Meliora/flagvai"
 #define TOPIC_AO_FLAG             "/cc3200/Meliora/flagvao"
 char* const CHANNELS[4] = {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO};
@@ -239,7 +239,7 @@ connect_config usr_connect_config[] =
         KEEP_ALIVE_TIMER,
         {Mqtt_Recv, sl_MqttEvt, sl_MqttDisconnect},
         TOPIC_COUNT,
-        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_AS},
+        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI},
         {QOS2, QOS2, QOS2},
         {WILL_TOPIC,WILL_MSG,WILL_QOS,WILL_RETAIN},
         false
@@ -317,17 +317,23 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     {
         maskChannels(input, (char*) payload);
     }
-    else if((strncmp(output_str,TOPIC_AI_AS, top_len) == 0) || (strncmp(output_str,TOPIC_AO_AS, top_len) == 0))
+    else if((strncmp(output_str,TOPIC_AI_AS, top_len) == 0))
     {
         saveAutoScaling((char*) payload);
     }
-    else if(strncmp(output_str,TOPIC_AO_AS, top_len) == 0)
+    else if(strncmp(output_str,TOPIC_AO_SI, top_len) == 0)
     {
-        char* message = (char*) payload;
-        message[0] = (message[0]-'0')+4+'0';
-        saveAutoScaling(message);
+
     }
-    else if(strncmp(output_str,TOPIC_AI_SI, top_len))
+    else if(strncmp(output_str,TOPIC_AI_SI, top_len) == 0)
+    {
+
+    }
+    else if(strncmp(output_str,TOPIC_AO_FLAG, top_len) == 0)
+    {
+
+    }
+    else if(strncmp(output_str,TOPIC_AI_FLAG, top_len) == 0)
     {
 
     }
