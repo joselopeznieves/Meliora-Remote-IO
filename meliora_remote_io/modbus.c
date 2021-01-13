@@ -13,7 +13,7 @@
 #define DISCRETE_INPUTS           4
 #define HOLDING_REGISTERS         8
 #define INPUT_REGISTERS           8
-#define ANALOG_CHANNELS           8
+#define ANALOG_CHANNELS           4
 #define SCALING_PARAMETERS        4
 
 /*
@@ -25,8 +25,8 @@
  */
 int coils[1];
 int discrete_inputs[1];
-int holding_registers[2*HOLDING_REGISTERS];
-int input_registers[2*INPUT_REGISTERS];
+int holding_registers[2*HOLDING_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x56, 0xFF, 0x41, 0x66, 0x41, 0xC0, 0x00, 0x00, 0x56, 0xFF, 0x41, 0x66};
+int input_registers[2*INPUT_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x56, 0xFF, 0x41, 0x66, 0x41, 0xC0, 0x00, 0x00, 0x56, 0xFF, 0x41, 0x66};
 
 /*
  * State of channels
@@ -41,19 +41,13 @@ int inputmask[INPUT_REGISTERS] = {0,0,0,0,0,0,0,0};
 /*
  * Initialize auto-scaling with default values
  * Analog Inputs: [0,1.5] -> [-24,24]
- * Analog Outputs: [0,24] -> [0,24]
  *
- * Note: Analog Outputs do not scale since the write function can handle [0,24]
- *      but reading Analog Inputs scales the value down to a number in [0,1.5]
+ * Note: Reading Analog Inputs scales the value down to a number in [0,1.5]
  */
 float autoScaling[ANALOG_CHANNELS][SCALING_PARAMETERS] = {{0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0},
-                                                          {0.0,-24.0,1.5,24.0},
-                                                          {0.0,0.0,24.0,24.0},
-                                                          {0.0,0.0,24.0,24.0},
-                                                          {0.0,0.0,24.0,24.0},
-                                                          {0.0,0.0,24.0,24.0}};
+                                                          {0.0,-24.0,1.5,24.0}};
 /*
 Function: readBits
 
@@ -238,8 +232,22 @@ float scale(float n1, float n2, float m1, float m2, float value) {
     return result;
 }
 
-int* instant_readAnalog() {
-    return NULL;
+void instant_readAnalog() {
+    int i;
+    float read, value;
+    short float2int[2] = {0};
+    for(i = 0; i < 4; i++) {
+        value = 0.0;
+        if(inputmask[2*i]) {
+            read = ReadAnalogInput(i); // [0,1.5]
+            value = scale(autoScaling[i][0], autoScaling[i][1], autoScaling[i][2], autoScaling[i][3], read); // [-24,24]
+        }
+        memcpy(float2int, &value, sizeof(float2int));
+        input_registers[4*i] = (float2int[1] & 0xFF00) >> 8;
+        input_registers[4*i+1] = (float2int[1] & 0x00FF);
+        input_registers[4*i+2] = (float2int[0] & 0xFF00) >> 8;
+        input_registers[4*i+3] = (float2int[0] & 0x00FF);
+    }
 }
 
 /*
@@ -432,6 +440,7 @@ exception03:
             goto exception04;
         }
         if((ec & 0x00FF) == 0) {
+            instant_readAnalog();
             int* bits = readRegisters(input_registers, address, amount);
             for(i = 0; i <= bits[0]; i++)
                 response[9+i] = bits[i];
@@ -642,4 +651,109 @@ void saveAutoScaling(char* message) {
           autoScaling[channel][i] = atof(token);
           token = strtok(NULL, ",");
        }
+}
+
+float int2float(int value) {
+    // handles all values from [-2^24...2^24]
+    // outside this range only some integers may be represented exactly
+    // this method will use truncation 'rounding mode' during conversion
+
+    // we can safely reinterpret it as 0.0
+    if (value == 0) return 0.0;
+
+    if (value == (1U<<31)) // ie -2^31
+    {
+        // -(-2^31) = -2^31 so we'll not be able to handle it below - use const
+        // value = 0xCF000000;
+        return (float) 0xCF000000;  // *((float*)&value); is undefined behaviour
+    }
+
+    int sign = 0;
+
+    // handle negative values
+    if (value < 0)
+    {
+        sign = 1U << 31;
+        value = -value;
+    }
+
+    // although right shift of signed is undefined - all compilers (that I know) do
+    // arithmetic shift (copies sign into MSB) is what I prefer here
+    // hence using unsigned abs_value_copy for shift
+    unsigned int abs_value_copy = value;
+
+    // find leading one
+    int bit_num = 31;
+    int shift_count = 0;
+
+    for(; bit_num > 0; bit_num--)
+    {
+        if (abs_value_copy & (1U<<bit_num))
+        {
+            if (bit_num >= 23)
+            {
+                // need to shift right
+                shift_count = bit_num - 23;
+                abs_value_copy >>= shift_count;
+            }
+            else
+            {
+                // need to shift left
+                shift_count = 23 - bit_num;
+                abs_value_copy <<= shift_count;
+            }
+            break;
+        }
+    }
+
+    // exponent is biased by 127
+    int exp = bit_num + 127;
+
+    // clear leading 1 (bit #23) (it will implicitly be there but not stored)
+    int coeff = abs_value_copy & ~(1<<23);
+
+    // move exp to the right place
+    exp <<= 23;
+
+    union
+    {
+        int rint;
+        float rfloat;
+    }ret = { sign | exp | coeff };
+
+    return ret.rfloat;
+}
+
+unsigned char* sendRegisterValues(int state) {
+    int i;
+    int Registers[4];
+    unsigned char* values = (unsigned char*) malloc(30*sizeof(unsigned char));
+    switch(state) {
+    // Analog Inputs
+    case 0: {
+
+        for(i = 0; i < 4; i++) {
+            short high = (short) ((input_registers[4*i] << 8) | input_registers[4*i+1]);
+            short low = (short) ((input_registers[4*i+2] << 8) | input_registers[4*i+3]);
+            int bits = (high << 16) | low;
+            Registers[i] = bits;
+        }
+        sprintf(values, "%0.1f,%0.1f,%0.1f,%0.1f", Registers[0], Registers[1], Registers[2], Registers[3]);
+        break;
+    }
+    case 1: {
+        for(i = 0; i < 4; i++) {
+            short high = (short) ((holding_registers[4*i] << 8) | holding_registers[4*i+1]);
+            short low = (short) ((holding_registers[4*i+2] << 8) | holding_registers[4*i+3]);
+            int bits = (high << 16) | low;
+            Registers[i] = bits;
+        }
+        sprintf(values, "%0.1f,%0.1f,%0.1f,%0.1f", Registers[0], Registers[1], Registers[2], Registers[3]);
+        break;
+    }
+    default: {
+        break;
+    }
+    }
+    return values;
 }

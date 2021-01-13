@@ -17,5 +17,6 @@ extern void writeMultipleRegisters(int* registers, int address, int amount, int*
 extern char* clientHandler(char* buffer);
 extern void readMask(int* discrete, int* coils, int* input, int* holding);
 extern void saveAutoScaling(char* message);
+extern unsigned char* sendRegisterValues(int state);
 
 #endif /* MODBUS_H_ */

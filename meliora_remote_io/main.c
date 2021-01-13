@@ -167,7 +167,9 @@ typedef enum
 {
     PUSH_BUTTON_SW2_PRESSED,
     PUSH_BUTTON_SW3_PRESSED,
-    BROKER_DISCONNECTION
+    BROKER_DISCONNECTION,
+    ANALOG_INPUTS,
+    ANALOG_OUTPUTS
 }events;
 
 typedef struct
@@ -331,12 +333,30 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     }
     else if(strncmp(output_str,TOPIC_AO_FLAG, top_len) == 0)
     {
+        if(strncmp((char*) payload, "1", 1) == 0) {
+            event_msg msg;
 
+            msg.event = ANALOG_OUTPUTS;
+            msg.hndl = NULL;
+            //
+            // write message indicating publish message
+            //
+            osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
+        }
     }
-    else if(strncmp(output_str,TOPIC_AI_FLAG, top_len) == 0)
-    {
-
-    }
+//    else if(strncmp(output_str,TOPIC_AI_FLAG, top_len) == 0)
+//    {
+//        if(strncmp((char*) payload, "1", 1) == 0) {
+//            event_msg msg;
+//
+//            msg.event = ANALOG_INPUTS;
+//            msg.hndl = NULL;
+//            //
+//            // write message indicating publish message
+//            //
+//            osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
+//        }
+//    }
 
     readMask(coil, discrete, holding, input);
 
@@ -890,6 +910,31 @@ connect_to_broker:
             UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
             UART_PRINT("Topic: %s\n\r",pub_topic_sw3);
             UART_PRINT("Data: %s\n\r",data_sw3);
+        }
+        else if(ANALOG_INPUTS == RecvQue.event)
+        {
+            unsigned char* message = sendRegisterValues(0);
+            //
+            // send publish message
+            //
+            sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
+                    PUB_TOPIC_AI, message,strlen((char*)message),QOS2,RETAIN);
+            UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
+            UART_PRINT("Topic: %s\n\r",PUB_TOPIC_AI);
+            UART_PRINT("Data: %s\n\r",message);
+        }
+        else if(ANALOG_OUTPUTS == RecvQue.event)
+        {
+            unsigned char* message = sendRegisterValues(1);
+            //
+            // send publish message
+            //
+
+            sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
+                    PUB_TOPIC_AO,message,strlen((char*) message),QOS2,RETAIN);
+            UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
+            UART_PRINT("Topic: %s\n\r",PUB_TOPIC_AO);
+            UART_PRINT("Data: %s\n\r",message);
         }
         else if(BROKER_DISCONNECTION == RecvQue.event)
         {
