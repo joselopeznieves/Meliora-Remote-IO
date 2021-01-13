@@ -305,32 +305,38 @@ void WriteDigitalOutput(int channel, int state){
 float ReadAnalogInput(int channel){
 
     unsigned long adc_out = 0;
-    float adc_voltage = 0;
+    float average_voltage = 0;
+    short readings = 8;
+    short i;
     unsigned int adc_channel;
 
-    switch(channel){
-        case 0:
-            //Pin 57 - A In 0
-            adc_channel = ADC_CH_0;
-            break;
-        case 1:
-            //Pin 58 - A In 1
-            adc_channel = ADC_CH_1;
-            break;
-        case 2:
-            //Pin 59 - A In 2
-            adc_channel = ADC_CH_2;
-            break;
-        case 3:
-            //Pin 60 - A In 3
-            adc_channel = ADC_CH_3;
-            break;
+    for(i = 0; i < readings; i++){
+        switch(channel){
+            case 0:
+                //Pin 57 - A In 0
+                adc_channel = ADC_CH_0;
+                break;
+            case 1:
+                //Pin 58 - A In 1
+                adc_channel = ADC_CH_1;
+                break;
+            case 2:
+                //Pin 59 - A In 2
+                adc_channel = ADC_CH_2;
+                break;
+            case 3:
+                //Pin 60 - A In 3
+                adc_channel = ADC_CH_3;
+                break;
+        }
+
+        adc_out = ADCFIFORead(ADC_BASE, adc_channel);
+        average_voltage += (((float)((adc_out >> 2 ) & 0x0FFF))*1.48)/4096;
+
     }
 
-    adc_out = ADCFIFORead(ADC_BASE, adc_channel);
-    adc_voltage = (((float)((adc_out >> 2 ) & 0x0FFF))*1.465)/4096;
 
-    return adc_voltage;
+    return average_voltage / readings;
 }
 
 //****************************************************************************
