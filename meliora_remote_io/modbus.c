@@ -5,25 +5,55 @@
  *      Author: Irving
  */
 #include "stdlib.h"
+#include "string.h"
 #include "modbus.h"
 #include "channel_interface.h"
 
 #define COILS                     4
 #define DISCRETE_INPUTS           4
-#define HOLDING_REGISTERS         4
-#define INPUT_REGISTERS           4
+#define HOLDING_REGISTERS         8
+#define INPUT_REGISTERS           8
+#define ANALOG_CHANNELS           8
+#define SCALING_PARAMETERS        4
 
+/*
+ * MODBUS Data Types
+ * coils -> Digital Outputs
+ * discrete inputs -> Digital Inputs
+ * holding registers -> Analog Outputs
+ * input registers -> Analog Inputs
+ */
+int coils[1];
+int discrete_inputs[1];
+int holding_registers[2*HOLDING_REGISTERS];
+int input_registers[2*INPUT_REGISTERS];
 
-int coils[1] = {0b1010};
-int discrete_inputs[1] = {0};
-int holding_registers[2*HOLDING_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x41, 0x48, 0x00, 0x00};
-int input_registers[2*INPUT_REGISTERS] = {0x41, 0xC0, 0x00, 0x00, 0x41, 0x48, 0x00, 0x00};
+/*
+ * State of channels
+ * 0 -> channel is off
+ * 1 -> channel is on
+ */
+int coilmask[COILS] = {0,0,0,0};
+int discretemask[DISCRETE_INPUTS] = {0,0,0,0};
+int holdingmask[HOLDING_REGISTERS] = {0,0,0,0,0,0,0,0};
+int inputmask[INPUT_REGISTERS] = {0,0,0,0,0,0,0,0};
 
-int coilmask[4] = {0,0,0,0};
-int discretemask[4] = {0,0,0,0};
-int holdingmask[4] = {0,0,0,0};
-int inputmask[4] = {0,0,0,0};
-
+/*
+ * Initialize auto-scaling with default values
+ * Analog Inputs: [0,1.5] -> [-24,24]
+ * Analog Outputs: [0,24] -> [0,24]
+ *
+ * Note: Analog Outputs do not scale since the write function can handle [0,24]
+ *      but reading Analog Inputs scales the value down to a number in [0,1.5]
+ */
+float autoScaling[ANALOG_CHANNELS][SCALING_PARAMETERS] = {{0.0,-24.0,1.5,24.0},
+                                                          {0.0,-24.0,1.5,24.0},
+                                                          {0.0,-24.0,1.5,24.0},
+                                                          {0.0,-24.0,1.5,24.0},
+                                                          {0.0,0.0,24.0,24.0},
+                                                          {0.0,0.0,24.0,24.0},
+                                                          {0.0,0.0,24.0,24.0},
+                                                          {0.0,0.0,24.0,24.0}};
 /*
 Function: readBits
 
@@ -180,9 +210,11 @@ void writeMultipleRegisters(int* registers, int address, int amount, int* values
     }
 }
 
-/*
-Helper functions
+/********************
+ * HELPER FUNCTIONS *
+ ********************/
 
+/*
 Function: instant_read
 
 Description: Read the values at the Digital input channels of the Microcontroller
@@ -191,7 +223,7 @@ Parameters:
     start -> starting address for channels to be read
     end -> last address for channels to be read
  */
-int instant_read(int start, int end) {
+int instant_readDigital(int start, int end) {
     int value = 0;
     int i;
     for(i = start; i < end; i++) {
@@ -199,6 +231,15 @@ int instant_read(int start, int end) {
         value = value | (bit << i);
     }
     return value;
+}
+
+float scale(float n1, float n2, float m1, float m2, float value) {
+    float result = n2+((value-n1)*((m2-n2)/(m1-n1)));
+    return result;
+}
+
+int* instant_readAnalog() {
+    return NULL;
 }
 
 /*
@@ -302,7 +343,7 @@ exception01:
             goto exception02;
         }
         if((ec & 0x00FF) == 0) {
-            discrete_inputs[0] = instant_read(start, last);
+            discrete_inputs[0] = instant_readDigital(start, last);
             int* bits = readBits(discrete_inputs, address, amount);
             for(i = 0; i <= bits[0]; i++)
                 response[9+i] = bits[i];
@@ -584,7 +625,21 @@ void readMask(int* coils, int* discrete, int* holding, int* input) {
     for(i = 0; i < 4; i++) {
         coilmask[i] = coils[i];
         discretemask[i] = discrete[i];
-        holdingmask[i] = holding[i];
-        inputmask[i] = input[i];
+        holdingmask[2*i] = holding[i];
+        holdingmask[2*i+1] = holding[i];
+        inputmask[2*i] = input[i];
+        inputmask[2*i+1] = input[i];
     }
+
+}
+
+void saveAutoScaling(char* message) {
+       char * token = strtok(message, ",");
+       int channel = atoi(token);
+       token = strtok(NULL, ",");
+       int i;
+       for(i = 0; i < 4; i++) {
+          autoScaling[channel][i] = atof(token);
+          token = strtok(NULL, ",");
+       }
 }

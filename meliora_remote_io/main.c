@@ -122,13 +122,21 @@ typedef enum{
 #define PUB_TOPIC_AO              "/cc3200/Meliora/vao"
 
 /*Defining Number of topics*/
-#define TOPIC_COUNT             4
+#define TOPIC_COUNT             9
 
 /*Defining Subscription Topic Values*/
 #define TOPIC_DI                  "/cc3200/Meliora/di"
 #define TOPIC_DO                  "/cc3200/Meliora/do"
 #define TOPIC_AI                  "/cc3200/Meliora/ai"
 #define TOPIC_AO                  "/cc3200/Meliora/ao"
+#define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
+#define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
+#define TOPIC_AO_AS               "/cc3200/Meliora/ao/slopeintercept"
+#define TOPIC_AI_FLAG             "/cc3200/Meliora/flagvai"
+#define TOPIC_AO_FLAG             "/cc3200/Meliora/flagvao"
+char* const CHANNELS[4] = {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO};
+char* const AS_SI[3] = {TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI};
+char* const FLAG[2] = {TOPIC_AI_FLAG, TOPIC_AO_FLAG};
 
 /*Defining QOS levels*/
 #define QOS0                    0
@@ -231,7 +239,7 @@ connect_config usr_connect_config[] =
         KEEP_ALIVE_TIMER,
         {Mqtt_Recv, sl_MqttEvt, sl_MqttDisconnect},
         TOPIC_COUNT,
-        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO},
+        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_AS},
         {QOS2, QOS2, QOS2},
         {WILL_TOPIC,WILL_MSG,WILL_QOS,WILL_RETAIN},
         false
@@ -308,6 +316,20 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     else if(strncmp(output_str,TOPIC_AI, top_len) == 0)
     {
         maskChannels(input, (char*) payload);
+    }
+    else if((strncmp(output_str,TOPIC_AI_AS, top_len) == 0) || (strncmp(output_str,TOPIC_AO_AS, top_len) == 0))
+    {
+        saveAutoScaling((char*) payload);
+    }
+    else if(strncmp(output_str,TOPIC_AO_AS, top_len) == 0)
+    {
+        char* message = (char*) payload;
+        message[0] = (message[0]-'0')+4+'0';
+        saveAutoScaling(message);
+    }
+    else if(strncmp(output_str,TOPIC_AI_SI, top_len))
+    {
+
     }
 
     readMask(coil, discrete, holding, input);
@@ -675,13 +697,12 @@ void MqttClient(void *pvParameters)
     int iNumBroker = 0;
     int iConnBroker = 0;
     event_msg RecvQue;
-    unsigned char policyVal;
 
     connect_config *local_con_conf = (connect_config *)app_hndl;
     //
     // Register Push Button Handlers
     //
-    Button_IF_Init(pushButtonInterruptHandler2,pushButtonInterruptHandler3);
+//    Button_IF_Init(pushButtonInterruptHandler2,pushButtonInterruptHandler3);
     
     //
     // Initialze MQTT client lib
@@ -775,14 +796,42 @@ connect_to_broker:
         //
 
         if(sl_ExtLib_MqttClientSub((void*)local_con_conf[iCount].clt_ctx,
-                                   local_con_conf[iCount].topic,
-                                   local_con_conf[iCount].qos, TOPIC_COUNT) < 0)
+                                   CHANNELS,
+                                   local_con_conf[iCount].qos, 4) < 0)
         {
             UART_PRINT("\n\r Subscription Error for conn no. %d\n\r", iCount+1);
             UART_PRINT("Disconnecting from the broker\r\n");
             sl_ExtLib_MqttClientDisconnect(local_con_conf[iCount].clt_ctx);
             local_con_conf[iCount].is_connected = false;
-            
+
+            //delete the context for this connection
+            sl_ExtLib_MqttClientCtxDelete(local_con_conf[iCount].clt_ctx);
+            iConnBroker--;
+            break;
+        }
+        else if(sl_ExtLib_MqttClientSub((void*)local_con_conf[iCount].clt_ctx,
+                                   AS_SI,
+                                   local_con_conf[iCount].qos, 3) < 0)
+        {
+            UART_PRINT("\n\r Subscription Error for conn no. %d\n\r", iCount+1);
+            UART_PRINT("Disconnecting from the broker\r\n");
+            sl_ExtLib_MqttClientDisconnect(local_con_conf[iCount].clt_ctx);
+            local_con_conf[iCount].is_connected = false;
+
+            //delete the context for this connection
+            sl_ExtLib_MqttClientCtxDelete(local_con_conf[iCount].clt_ctx);
+            iConnBroker--;
+            break;
+        }
+        else if(sl_ExtLib_MqttClientSub((void*)local_con_conf[iCount].clt_ctx,
+                                   FLAG,
+                                   local_con_conf[iCount].qos, 2) < 0)
+        {
+            UART_PRINT("\n\r Subscription Error for conn no. %d\n\r", iCount+1);
+            UART_PRINT("Disconnecting from the broker\r\n");
+            sl_ExtLib_MqttClientDisconnect(local_con_conf[iCount].clt_ctx);
+            local_con_conf[iCount].is_connected = false;
+
             //delete the context for this connection
             sl_ExtLib_MqttClientCtxDelete(local_con_conf[iCount].clt_ctx);
             iConnBroker--;
@@ -791,11 +840,9 @@ connect_to_broker:
         else
         {
             int iSub;
-            UART_PRINT("Client subscribed on following topics:\n\r");
-            for(iSub = 0; iSub < local_con_conf[iCount].num_topics; iSub++)
-            {
+            UART_PRINT("Client subscribed on following topic:\n\r");
+            for(iSub = 0; iSub < TOPIC_COUNT; iSub++)
                 UART_PRINT("%s\n\r", local_con_conf[iCount].topic[iSub]);
-            }
         }
         iCount++;
     }
