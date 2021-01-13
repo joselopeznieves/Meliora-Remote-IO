@@ -134,7 +134,7 @@ typedef enum{
 #define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
 #define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
 #define TOPIC_AO_SI               "/cc3200/Meliora/ao/slopeintercept"
-#define TOPIC_UDMA                "/cc3200/Meliora/udma"
+#define TOPIC_UDMA                "/cc3200/Meliora/addressing"
 #define TOPIC_AI_FLAG             "/cc3200/Meliora/flagvai"
 #define TOPIC_AO_FLAG             "/cc3200/Meliora/flagvao"
 char* const CHANNELS[4] = {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO};
