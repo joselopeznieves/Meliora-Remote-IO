@@ -1226,6 +1226,9 @@ void main()
     //
     DisplayBanner("MQTT_Client");
 
+    InitPWMModules();
+    ADCInit();
+
     //
     // Start the SimpleLink Host
     //
