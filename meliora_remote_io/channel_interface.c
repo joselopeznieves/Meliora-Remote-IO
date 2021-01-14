@@ -23,6 +23,8 @@
 #include "timer.h"
 #include "adc.h"
 
+#include "channel_interface.h"
+
 #define TIMER_INTERVAL_RELOAD   800 // =(400*2)
 #define DUTYCYCLE_GRANULARITY   2
 
