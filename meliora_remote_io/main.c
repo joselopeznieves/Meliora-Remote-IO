@@ -204,7 +204,7 @@ connect_config usr_connect_config[] =
         {Mqtt_Recv, sl_MqttEvt, sl_MqttDisconnect},
         TOPIC_COUNT,
         {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI, TOPIC_UDMA, TOPIC_FLAG},
-        {QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2},
+        {QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2},
         {WILL_TOPIC,WILL_MSG,WILL_QOS,WILL_RETAIN},
         false
     }
@@ -281,15 +281,17 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     }
     else if((strncmp(output_str,TOPIC_AI_AS, top_len) == 0))
     {
-        saveAutoScaling((char*) payload);
+        set_flag();
+        save_autoscaling((char*) payload);
     }
     else if(strncmp(output_str,TOPIC_AO_SI, top_len) == 0)
     {
-
+        save_slopeintercept((char*) payload, 1);
     }
     else if(strncmp(output_str,TOPIC_AI_SI, top_len) == 0)
     {
-
+        clear_flag();
+        save_slopeintercept((char*) payload, 0);
     }
     else if(strncmp(output_str, TOPIC_UDMA, top_len) == 0)
     {

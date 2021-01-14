@@ -16,6 +16,7 @@
 #define INPUT_REGISTERS           8
 #define ANALOG_CHANNELS           4
 #define SCALING_PARAMETERS        4
+#define SLOPE_PARAMETERS          2
 #define UDMA                      4
 
 /*
@@ -50,6 +51,18 @@ float autoScaling[ANALOG_CHANNELS][SCALING_PARAMETERS] = {{0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0},
                                                           {0.0,-24.0,1.5,24.0}};
+
+float slopeInterceptAI[ANALOG_CHANNELS][SLOPE_PARAMETERS] = {{32.0, -24.0},
+                                                             {32.0, -24.0},
+                                                             {32.0, -24.0},
+                                                             {32.0, -24.0}};
+
+float slopeInterceptAO[ANALOG_CHANNELS][SLOPE_PARAMETERS] = {{1.0, 0.0},
+                                                             {1.0, 0.0},
+                                                             {1.0, 0.0},
+                                                             {1.0, 0.0}};
+
+int flag = 1;
 
 /*
  * 0 -> Digital Inputs
@@ -214,12 +227,21 @@ void writeMultipleRegisters(int* registers, int address, int amount, int* values
         index++;
     }
     short upper, lower;
-    float voltage = 0.0;
-    for(i = 0; i < 4; i++) {
-        upper = (registers[4*i] << 8) | registers[4*i+1];
-        lower = (registers[4*i+2] << 8) | registers[4*i+3];
-        short bits[2] = {upper, lower};
-        memcpy(&voltage, bits, sizeof(voltage));
+    float voltage;
+    for(i = 0; i < ANALOG_CHANNELS; i++) {
+        voltage = 0.0;
+        if(holdingmask[2*i]) {
+            upper = (registers[4*i] << 8) | registers[4*i+1];
+            lower = (registers[4*i+2] << 8) | registers[4*i+3];
+            short bits[2] = {upper, lower};
+            memcpy(&voltage, bits, sizeof(voltage));
+            voltage = slope(slopeInterceptAO[i][0], slopeInterceptAO[i][1], voltage);
+            memcpy(bits, &voltage, sizeof(bits));
+            registers[4*i] = (bits[0] & 0xFF00) >> 8;
+            registers[4*i+1] = (bits[0] & 0x00FF);
+            registers[4*i+2] = (bits[1] & 0xFF00) >> 8;
+            registers[4*i+3] = (bits[1] & 0x00FF);
+        }
         WriteAnalogOutput(i, voltage);
     }
 }
@@ -252,6 +274,11 @@ float scale(float n1, float n2, float m1, float m2, float value) {
     return result;
 }
 
+float slope(float M, float D, float value) {
+    float result = (M*value)+D;
+    return result;
+}
+
 void instant_readAnalog() {
     int i;
     float read, value;
@@ -260,7 +287,10 @@ void instant_readAnalog() {
         value = 0.0;
         if(inputmask[2*i]) {
             read = ReadAnalogInput(i); // [0,1.5]
-            value = scale(autoScaling[i][0], autoScaling[i][1], autoScaling[i][2], autoScaling[i][3], read); // [-24,24]
+            if(flag)
+                value = scale(autoScaling[i][0], autoScaling[i][1], autoScaling[i][2], autoScaling[i][3], read); // [-24,24]
+            else
+                value = slope(slopeInterceptAI[i][0], slopeInterceptAI[i][1], read);
         }
         memcpy(float2int, &value, sizeof(float2int));
         input_registers[4*i] = (float2int[0] & 0xFF00) >> 8;
@@ -610,7 +640,7 @@ exception0F:
             ec = ec | 0x02;
             goto exception10;
         }
-        else if(amount < 1 || address+amount-1 > HOLDING_REGISTERS) {
+        else if(amount < 1 || address+amount-1 > HOLDING_REGISTERS || amount%2) {
             ec = ec | 0x03;
             goto exception10;
         }
@@ -663,21 +693,54 @@ void readMask(int* coils, int* discrete, int* holding, int* input) {
 
 }
 
-void saveAutoScaling(char* message) {
-       char * token = strtok(message, ",");
+void save_autoscaling(char* message) {
+       char* token = strtok(message, ",");
        int channel = atoi(token);
        token = strtok(NULL, ",");
        int i;
-       for(i = 0; i < 4; i++) {
+       for(i = 0; i < SCALING_PARAMETERS; i++) {
           autoScaling[channel][i] = atof(token);
           token = strtok(NULL, ",");
        }
 }
 
+void save_slopeintercept(char* message, int state) {
+    char* token = strtok(message, ",");
+    int channel = atoi(token);
+    token = strtok(NULL, ",");
+    int i;
+    switch(state) {
+    // Analog Inputs
+    case 0: {
+        for(i = 0; i < SLOPE_PARAMETERS; i++) {
+            slopeInterceptAI[channel][i] = atof(token);
+            token = strtok(NULL, ",");
+        }
+        break;
+    }
+    // Analog Outputs
+    case 1: {
+        for(i = 0; i < SLOPE_PARAMETERS; i++) {
+            slopeInterceptAO[channel][i] = atof(token);
+            token = strtok(NULL, ",");
+        }
+        break;
+    }
+    }
+}
+
+void set_flag() {
+    flag = 1;
+}
+
+void clear_flag() {
+    flag = 0;
+}
+
 void save_udma(char* message) {
     char* token = strtok(message, ",");
     int i;
-    for(i = 0; i < 4; i++) {
+    for(i = 0; i < UDMA; i++) {
         udma[i] = atoi(token)-1;
         token = strtok(NULL, ",");
     }
@@ -686,14 +749,14 @@ void save_udma(char* message) {
 unsigned char* sendRegisterValues(int state) {
     int i;
     short upper, lower;
-    float Registers[4];
+    float Registers[ANALOG_CHANNELS];
     char* values = (char*) malloc(50*sizeof(char));
     unsigned char* vtr = (unsigned char*) malloc(50*sizeof(unsigned char));
     switch(state) {
     // Analog Inputs
     case 0: {
 
-        for(i = 0; i < 4; i++) {
+        for(i = 0; i < ANALOG_CHANNELS; i++) {
             upper = (short) ((input_registers[4*i] << 8) | input_registers[4*i+1]);
             lower = (short) ((input_registers[4*i+2] << 8) | input_registers[4*i+3]);
             short bits[2] = {upper, lower};
@@ -701,8 +764,9 @@ unsigned char* sendRegisterValues(int state) {
         }
         break;
     }
+    // Analog Outputs
     case 1: {
-        for(i = 0; i < 4; i++) {
+        for(i = 0; i < ANALOG_CHANNELS; i++) {
             upper = (short) ((holding_registers[4*i] << 8) | holding_registers[4*i+1]);
             lower = (short) ((holding_registers[4*i+2] << 8) | holding_registers[4*i+3]);
             short bits[2] = {upper, lower};
