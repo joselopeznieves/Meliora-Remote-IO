@@ -35,7 +35,7 @@
 
 #include "modbus.h"
 
-//#include "channel_interface.h"
+#include "channel_interface.h"
 
 typedef enum{
     // Choosing -0x7D0 to avoid overlap w/ host-driver's error codes
@@ -93,7 +93,7 @@ typedef enum{
 #define PUB_TOPIC_AO              "/cc3200/Meliora/vao"
 
 /*Defining Number of topics*/
-#define TOPIC_COUNT             10
+#define TOPIC_COUNT             9
 
 /*Defining Subscription Topic Values*/
 #define TOPIC_DI                  "/cc3200/Meliora/di"
@@ -103,12 +103,11 @@ typedef enum{
 #define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
 #define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
 #define TOPIC_AO_SI               "/cc3200/Meliora/ao/slopeintercept"
-#define TOPIC_UDMA                "/cc3200/Meliora/user"
-#define TOPIC_AI_FLAG             "/cc3200/Meliora/flagvai"
-#define TOPIC_AO_FLAG             "/cc3200/Meliora/flagvao"
+#define TOPIC_UDMA                "/cc3200/Meliora/addressing"
+#define TOPIC_FLAG                "/cc3200/Meliora/flag"
 char* const CHANNELS[4] = {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO};
 char* const AS_SI[3] = {TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI};
-char* const FLAG[3] = {TOPIC_UDMA, TOPIC_AI_FLAG, TOPIC_AO_FLAG};
+char* const FLAG[2] = {TOPIC_UDMA, TOPIC_FLAG};
 
 /*Defining QOS levels*/
 #define QOS0                    0
@@ -137,8 +136,7 @@ typedef struct connection_config{
 typedef enum
 {
     BROKER_DISCONNECTION,
-    ANALOG_INPUTS,
-    ANALOG_OUTPUTS
+    ANALOG
 }events;
 
 typedef struct
@@ -205,7 +203,7 @@ connect_config usr_connect_config[] =
         KEEP_ALIVE_TIMER,
         {Mqtt_Recv, sl_MqttEvt, sl_MqttDisconnect},
         TOPIC_COUNT,
-        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI, TOPIC_UDMA, TOPIC_AI_FLAG, TOPIC_AO_FLAG},
+        {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO, TOPIC_AI_AS, TOPIC_AI_SI, TOPIC_AO_SI, TOPIC_UDMA, TOPIC_FLAG},
         {QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2, QOS2},
         {WILL_TOPIC,WILL_MSG,WILL_QOS,WILL_RETAIN},
         false
@@ -297,12 +295,12 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
     {
         save_udma((char*) payload);
     }
-    else if(strncmp(output_str,TOPIC_AO_FLAG, top_len) == 0)
+    else if(strncmp(output_str,TOPIC_FLAG, top_len) == 0)
     {
         if(strncmp((char*) payload, "1", 1) == 0) {
             event_msg msg;
 
-            msg.event = ANALOG_OUTPUTS;
+            msg.event = ANALOG;
             msg.hndl = NULL;
             //
             // write message indicating publish message
@@ -310,19 +308,6 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
             osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
         }
     }
-//    else if(strncmp(output_str,TOPIC_AI_FLAG, top_len) == 0)
-//    {
-//        if(strncmp((char*) payload, "1", 1) == 0) {
-//            event_msg msg;
-//
-//            msg.event = ANALOG_INPUTS;
-//            msg.hndl = NULL;
-//            //
-//            // write message indicating publish message
-//            //
-//            osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
-//        }
-//    }
 
     readMask(coil, discrete, holding, input);
 
@@ -601,24 +586,22 @@ connect_to_broker:
     {
         osi_MsgQRead( &g_PBQueue, &RecvQue, OSI_WAIT_FOREVER);
         
-        if(ANALOG_INPUTS == RecvQue.event)
+        if(ANALOG == RecvQue.event)
         {
             unsigned char* message = sendRegisterValues(0);
             //
             // send publish message
             //
             sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
-                    PUB_TOPIC_AI, message,strlen((char*)message),QOS2,RETAIN);
-        }
-        else if(ANALOG_OUTPUTS == RecvQue.event)
-        {
-            unsigned char* message = sendRegisterValues(1);
+                                     PUB_TOPIC_AI,message,strlen((char*)message),QOS2,RETAIN);
+
+            message = sendRegisterValues(1);
             //
             // send publish message
             //
 
             sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
-                    PUB_TOPIC_AO,message,strlen((char*) message),QOS2,RETAIN);
+                                     PUB_TOPIC_AO,message,strlen((char*) message),QOS2,RETAIN);
         }
         else if(BROKER_DISCONNECTION == RecvQue.event)
         {

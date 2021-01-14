@@ -4,6 +4,7 @@
  *  Created on: Dec 4, 2020
  *      Author: Irving
  */
+#include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "modbus.h"
@@ -684,34 +685,37 @@ void save_udma(char* message) {
 
 unsigned char* sendRegisterValues(int state) {
     int i;
-    int Registers[4];
-    unsigned char* values = (unsigned char*) malloc(30*sizeof(unsigned char));
+    short upper, lower;
+    float Registers[4];
+    char* values = (char*) malloc(50*sizeof(char));
+    unsigned char* vtr = (unsigned char*) malloc(50*sizeof(unsigned char));
     switch(state) {
     // Analog Inputs
     case 0: {
 
         for(i = 0; i < 4; i++) {
-            short high = (short) ((input_registers[4*i] << 8) | input_registers[4*i+1]);
-            short low = (short) ((input_registers[4*i+2] << 8) | input_registers[4*i+3]);
-            int bits = (high << 16) | low;
-            Registers[i] = bits;
+            upper = (short) ((input_registers[4*i] << 8) | input_registers[4*i+1]);
+            lower = (short) ((input_registers[4*i+2] << 8) | input_registers[4*i+3]);
+            short bits[2] = {upper, lower};
+            memcpy(&Registers[i], bits, sizeof(Registers[i]));
         }
-        sprintf(values, "%0.1f,%0.1f,%0.1f,%0.1f", Registers[0], Registers[1], Registers[2], Registers[3]);
         break;
     }
     case 1: {
         for(i = 0; i < 4; i++) {
-            short high = (short) ((holding_registers[4*i] << 8) | holding_registers[4*i+1]);
-            short low = (short) ((holding_registers[4*i+2] << 8) | holding_registers[4*i+3]);
-            int bits = (high << 16) | low;
-            Registers[i] = bits;
+            upper = (short) ((holding_registers[4*i] << 8) | holding_registers[4*i+1]);
+            lower = (short) ((holding_registers[4*i+2] << 8) | holding_registers[4*i+3]);
+            short bits[2] = {upper, lower};
+            memcpy(&Registers[i], bits, sizeof(Registers[i]));
         }
-        sprintf(values, "%0.1f,%0.1f,%0.1f,%0.1f", Registers[0], Registers[1], Registers[2], Registers[3]);
         break;
     }
     default: {
         break;
     }
     }
-    return values;
+    sprintf(values, "%0.1f,%0.1f,%0.1f,%0.1f", Registers[0], Registers[1], Registers[2], Registers[3]);
+    strncpy((char*) vtr, values, 50);
+
+    return vtr;
 }
