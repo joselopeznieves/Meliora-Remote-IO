@@ -1,34 +1,3 @@
-//*****************************************************************************
-// Copyright (C) 2014 Texas Instruments Incorporated
-//
-// All rights reserved. Property of Texas Instruments Incorporated.
-// Restricted rights to use, duplicate or disclose this code are
-// granted through contract.
-// The program may not be used without the written permission of
-// Texas Instruments Incorporated or against the terms and conditions
-// stipulated in the agreement under which this program has been supplied,
-// and under no circumstances can it be used with non-TI connectivity device.
-//
-//*****************************************************************************
-
-//*****************************************************************************
-//
-// Application Name     -   MQTT Client
-// Application Overview -   This application acts as a MQTT client and connects
-//                          to the IBM MQTT broker, simultaneously we can
-//                          connect a web client from a web browser. Both
-//                          clients can inter-communicate using appropriate
-//                          topic names.
-//
-//*****************************************************************************
-
-//*****************************************************************************
-//
-//! \addtogroup mqtt_client
-//! @{
-//
-//*****************************************************************************
-
 // Standard includes
 #include <stdlib.h>
 
@@ -134,7 +103,7 @@ typedef enum{
 #define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
 #define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
 #define TOPIC_AO_SI               "/cc3200/Meliora/ao/slopeintercept"
-#define TOPIC_UDMA                "/cc3200/Meliora/addressing"
+#define TOPIC_UDMA                "/cc3200/Meliora/user"
 #define TOPIC_AI_FLAG             "/cc3200/Meliora/flagvai"
 #define TOPIC_AO_FLAG             "/cc3200/Meliora/flagvao"
 char* const CHANNELS[4] = {TOPIC_DI, TOPIC_DO, TOPIC_AI, TOPIC_AO};
@@ -148,7 +117,6 @@ char* const FLAG[3] = {TOPIC_UDMA, TOPIC_AI_FLAG, TOPIC_AO_FLAG};
 
 /*Spawn task priority and OSI Stack Size*/
 #define OSI_STACK_SIZE          2048
-#define UART_PRINT              Report
 
 typedef struct connection_config{
     SlMqttClientCtxCfg_t broker_config;
@@ -168,8 +136,6 @@ typedef struct connection_config{
 
 typedef enum
 {
-    PUSH_BUTTON_SW2_PRESSED,
-    PUSH_BUTTON_SW3_PRESSED,
     BROKER_DISCONNECTION,
     ANALOG_INPUTS,
     ANALOG_OUTPUTS
@@ -190,16 +156,11 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
 static void sl_MqttEvt(void *app_hndl,long evt, const void *buf,
                        unsigned long len);
 static void sl_MqttDisconnect(void *app_hndl);
-void pushButtonInterruptHandler2();
-void pushButtonInterruptHandler3();
 void maskChannels(int* masks, char* cmd);
-void ToggleLedState(ledEnum LedNum);
-void TimerPeriodicIntHandler(void);
-void LedTimerConfigNStart();
-void LedTimerDeinitStop();
 void BoardInit(void);
-static void DisplayBanner(char * AppName);
 void MqttClient(void *pvParameters);
+void ModbusTask( void *pvParameters);
+void ConnectToAP(void *pvParameters);
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
@@ -260,11 +221,6 @@ SlMqttClientLibCfg_t Mqtt_Client={
     (long(*)(const char *, ...))UART_PRINT
 };
 
-/*Publishing topics and messages*/
-const char *pub_topic_sw2 = PUB_TOPIC_AI;
-const char *pub_topic_sw3 = PUB_TOPIC_AO;
-unsigned char *data_sw2={"Push button sw2 is pressed on CC32XX device"};
-unsigned char *data_sw3={"Push button sw3 is pressed on CC32XX device"};
 
 void *app_hndl = (void*)usr_connect_config;
 
@@ -274,6 +230,9 @@ int holding[4] = {0,0,0,0};
 int input[4] = {0,0,0,0};
 
 OsiSyncObj_t sync_obj;
+OsiTaskHandle handle;
+
+extern volatile unsigned long g_ulStatus;
 
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- End
@@ -367,23 +326,6 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
 
     readMask(coil, discrete, holding, input);
 
-    UART_PRINT("\n\rPublish Message Received");
-    UART_PRINT("\n\rTopic: ");
-    UART_PRINT("%s",output_str);
-    free(output_str);
-    UART_PRINT(" [Qos: %d] ",qos);
-    if(retain)
-      UART_PRINT(" [Retained]");
-    if(dup)
-      UART_PRINT(" [Duplicate]");
-
-    output_str=(char*)malloc(pay_len+1);
-    memset(output_str,'\0',pay_len+1);
-    strncpy(output_str, (char*)payload, pay_len);
-    output_str[pay_len]='\0';
-    UART_PRINT("\n\rData is: ");
-    UART_PRINT("%s",(char*)output_str);
-    UART_PRINT("\n\r");
     free(output_str);
 
     return;
@@ -391,49 +333,30 @@ Mqtt_Recv(void *app_hndl, const char  *topstr, long top_len, const void *payload
 
 //****************************************************************************
 //! Defines sl_MqttEvt event handler.
-//! Client App needs to register this event handler with sl_ExtLib_mqtt_Init 
-//! API. Background receive task invokes this handler whenever MQTT Client 
+//! Client App needs to register this event handler with sl_ExtLib_mqtt_Init
+//! API. Background receive task invokes this handler whenever MQTT Client
 //! receives an ack(whenever user is in non-blocking mode) or encounters an error.
 //!
-//! param[out]      evt => Event that invokes the handler. Event can be of the
-//!                        following types:
-//!                        MQTT_ACK - Ack Received 
-//!                        MQTT_ERROR - unknown error
-//!                        
-//!  
-//! \param[out]     buf => points to buffer
-//! \param[out]     len => buffer length
-//!       
+//!
 //! \return none
 //****************************************************************************
 static void
 sl_MqttEvt(void *app_hndl, long evt, const void *buf,unsigned long len)
 {
-    int i;
     switch(evt)
     {
       case SL_MQTT_CL_EVT_PUBACK:
-        UART_PRINT("PubAck:\n\r");
-        UART_PRINT("%s\n\r",buf);
         break;
-    
+
       case SL_MQTT_CL_EVT_SUBACK:
-        UART_PRINT("\n\rGranted QoS Levels are:\n\r");
-        
-        for(i=0;i<len;i++)
-        {
-          UART_PRINT("QoS %d\n\r",((unsigned char*)buf)[i]);
-        }
         break;
-        
+
       case SL_MQTT_CL_EVT_UNSUBACK:
-        UART_PRINT("UnSub Ack \n\r");
-        UART_PRINT("%s\n\r",buf);
         break;
-    
+
       default:
         break;
-  
+
     }
 }
 
@@ -455,57 +378,9 @@ sl_MqttDisconnect(void *app_hndl)
     msg.hndl = app_hndl;
     msg.event = BROKER_DISCONNECTION;
 
-    UART_PRINT("disconnect from broker %s\r\n",
-           (local_con_conf->broker_config).server_info.server_addr);
     local_con_conf->is_connected = false;
     //
     // write message indicating publish message
-    //
-    osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
-
-}
-
-//****************************************************************************
-//
-//! Push Button Handler1(GPIOS2). Press push button2 (GPIOSW2) Whenever user
-//! wants to publish a message. Write message into message queue signaling the
-//!    event publish messages
-//!
-//! \param none
-//!
-//! return none
-//
-//****************************************************************************
-void pushButtonInterruptHandler2()
-{
-	event_msg msg;
-
-    msg.event = PUSH_BUTTON_SW2_PRESSED;
-    msg.hndl = NULL;
-    //
-    // write message indicating publish message
-    //
-    osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
-}
-
-//****************************************************************************
-//
-//! Push Button Handler3(GPIOS3). Press push button3 (GPIOSW3) Whenever user
-//! wants to publish a message. Write message into message queue signaling the
-//!    event publish messages
-//!
-//! \param none
-//!
-//! return none
-//
-//****************************************************************************
-void pushButtonInterruptHandler3()
-{
-	event_msg msg;
-	msg.event = PUSH_BUTTON_SW3_PRESSED;
-    msg.hndl = NULL;
-    //
-    // write message indicating exit from sending loop
     //
     osi_MsgQWrite(&g_PBQueue,&msg,OSI_NO_WAIT);
 
@@ -519,137 +394,6 @@ void maskChannels(int* masks, char* cmd)
     }
 }
 
-//****************************************************************************
-//
-//!    Toggles the state of GPIOs(LEDs)
-//!
-//! \param LedNum is the enumeration for the GPIO to be toggled
-//!
-//!    \return none
-//
-//****************************************************************************
-void ToggleLedState(ledEnum LedNum)
-{
-    unsigned char ledstate = 0;
-    switch(LedNum)
-    {
-    case LED1:
-        ledstate = GPIO_IF_LedStatus(MCU_RED_LED_GPIO);
-        if(!ledstate)
-        {
-            GPIO_IF_LedOn(MCU_RED_LED_GPIO);
-        }
-        else
-        {
-            GPIO_IF_LedOff(MCU_RED_LED_GPIO);
-        }
-        break;
-    case LED2:
-        ledstate = GPIO_IF_LedStatus(MCU_ORANGE_LED_GPIO);
-        if(!ledstate)
-        {
-            GPIO_IF_LedOn(MCU_ORANGE_LED_GPIO);
-        }
-        else
-        {
-            GPIO_IF_LedOff(MCU_ORANGE_LED_GPIO);
-        }
-        break;
-    case LED3:
-        ledstate = GPIO_IF_LedStatus(MCU_GREEN_LED_GPIO);
-        if(!ledstate)
-        {
-            GPIO_IF_LedOn(MCU_GREEN_LED_GPIO);
-        }
-        else
-        {
-            GPIO_IF_LedOff(MCU_GREEN_LED_GPIO);
-        }
-        break;
-    default:
-        break;
-    }
-}
-
-//*****************************************************************************
-//
-//! Periodic Timer Interrupt Handler
-//!
-//! \param None
-//!
-//! \return None
-//
-//*****************************************************************************
-void
-TimerPeriodicIntHandler(void)
-{
-    unsigned long ulInts;
-
-    //
-    // Clear all pending interrupts from the timer we are
-    // currently using.
-    //
-    ulInts = MAP_TimerIntStatus(TIMERA0_BASE, true);
-    MAP_TimerIntClear(TIMERA0_BASE, ulInts);
-
-    //
-    // Increment our interrupt counter.
-    //
-    g_usTimerInts++;
-    if(!(g_usTimerInts & 0x1))
-    {
-        //
-        // Off Led
-        //
-        GPIO_IF_LedOff(MCU_RED_LED_GPIO);
-    }
-    else
-    {
-        //
-        // On Led
-        //
-        GPIO_IF_LedOn(MCU_RED_LED_GPIO);
-    }
-}
-
-//****************************************************************************
-//
-//! Function to configure and start timer to blink the LED while device is
-//! trying to connect to an AP
-//!
-//! \param none
-//!
-//! return none
-//
-//****************************************************************************
-void LedTimerConfigNStart()
-{
-    //
-    // Configure Timer for blinking the LED for IP acquisition
-    //
-    Timer_IF_Init(PRCM_TIMERA0,TIMERA0_BASE,TIMER_CFG_PERIODIC,TIMER_A,0);
-    Timer_IF_IntSetup(TIMERA0_BASE,TIMER_A,TimerPeriodicIntHandler);
-    Timer_IF_Start(TIMERA0_BASE,TIMER_A,100);
-}
-
-//****************************************************************************
-//
-//! Disable the LED blinking Timer as Device is connected to AP
-//!
-//! \param none
-//!
-//! return none
-//
-//****************************************************************************
-void LedTimerDeinitStop()
-{
-    //
-    // Disable the LED blinking Timer as Device is connected to AP
-    //
-    Timer_IF_Stop(TIMERA0_BASE,TIMER_A);
-    Timer_IF_DeInit(TIMERA0_BASE,TIMER_A);
-
-}
 
 //*****************************************************************************
 //
@@ -683,27 +427,6 @@ void BoardInit(void)
     PRCMCC3200MCUInit();
 }
 
-//*****************************************************************************
-//
-//! Application startup display on UART
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
-static void
-DisplayBanner(char * AppName)
-{
-
-    UART_PRINT("\n\n\n\r");
-    UART_PRINT("\t\t *************************************************\n\r");
-    UART_PRINT("\t\t    CC3200 %s Application       \n\r", AppName);
-    UART_PRINT("\t\t *************************************************\n\r");
-    UART_PRINT("\n\n\n\r");
-}
-  
-extern volatile unsigned long g_ulStatus;
 
 //*****************************************************************************
 //
@@ -723,7 +446,7 @@ extern volatile unsigned long g_ulStatus;
 //*****************************************************************************
 void MqttClient(void *pvParameters)
 {
-    int value = osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
+    osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
     osi_SyncObjSignal(&sync_obj);
     long lRetVal = -1;
     int iCount = 0;
@@ -744,7 +467,6 @@ void MqttClient(void *pvParameters)
     if(lRetVal != 0)
     {
         // lib initialization failed
-        UART_PRINT("MQTT Client lib initialization failed\n\r");
         LOOP_FOREVER();
     }
     
@@ -752,7 +474,6 @@ void MqttClient(void *pvParameters)
     iNumBroker = sizeof(usr_connect_config)/sizeof(connect_config);
     if(iNumBroker > MAX_BROKER_CONN)
     {
-        UART_PRINT("Num of brokers are more then max num of brokers\n\r");
         LOOP_FOREVER();
     }
 
@@ -810,7 +531,6 @@ connect_to_broker:
                             local_con_conf[iCount].is_clean,
                             local_con_conf[iCount].keep_alive_time) & 0xFF) != 0)
         {
-            UART_PRINT("\n\rBroker connect fail for conn no. %d \n\r",iCount+1);
             
             //delete the context for this connection
             sl_ExtLib_MqttClientCtxDelete(local_con_conf[iCount].clt_ctx);
@@ -819,7 +539,6 @@ connect_to_broker:
         }
         else
         {
-            UART_PRINT("\n\rSuccess: conn to Broker no. %d\n\r ", iCount+1);
             local_con_conf[iCount].is_connected = true;
             iConnBroker++;
         }
@@ -832,8 +551,6 @@ connect_to_broker:
                                    CHANNELS,
                                    local_con_conf[iCount].qos, 4) < 0)
         {
-            UART_PRINT("\n\r Subscription Error for conn no. %d\n\r", iCount+1);
-            UART_PRINT("Disconnecting from the broker\r\n");
             sl_ExtLib_MqttClientDisconnect(local_con_conf[iCount].clt_ctx);
             local_con_conf[iCount].is_connected = false;
 
@@ -846,8 +563,7 @@ connect_to_broker:
                                    AS_SI,
                                    local_con_conf[iCount].qos, 3) < 0)
         {
-            UART_PRINT("\n\r Subscription Error for conn no. %d\n\r", iCount+1);
-            UART_PRINT("Disconnecting from the broker\r\n");
+
             sl_ExtLib_MqttClientDisconnect(local_con_conf[iCount].clt_ctx);
             local_con_conf[iCount].is_connected = false;
 
@@ -860,8 +576,6 @@ connect_to_broker:
                                    FLAG,
                                    local_con_conf[iCount].qos, 2) < 0)
         {
-            UART_PRINT("\n\r Subscription Error for conn no. %d\n\r", iCount+1);
-            UART_PRINT("Disconnecting from the broker\r\n");
             sl_ExtLib_MqttClientDisconnect(local_con_conf[iCount].clt_ctx);
             local_con_conf[iCount].is_connected = false;
 
@@ -869,13 +583,6 @@ connect_to_broker:
             sl_ExtLib_MqttClientCtxDelete(local_con_conf[iCount].clt_ctx);
             iConnBroker--;
             break;
-        }
-        else
-        {
-            int iSub;
-            UART_PRINT("Client subscribed on following topic:\n\r");
-            for(iSub = 0; iSub < TOPIC_COUNT; iSub++)
-                UART_PRINT("%s\n\r", local_con_conf[iCount].topic[iSub]);
         }
         iCount++;
     }
@@ -894,31 +601,7 @@ connect_to_broker:
     {
         osi_MsgQRead( &g_PBQueue, &RecvQue, OSI_WAIT_FOREVER);
         
-        if(PUSH_BUTTON_SW2_PRESSED == RecvQue.event)
-        {
-            Button_IF_EnableInterrupt(SW2);
-            //
-            // send publish message
-            //
-            sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
-                    pub_topic_sw2,data_sw2,strlen((char*)data_sw2),QOS2,RETAIN);
-            UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
-            UART_PRINT("Topic: %s\n\r",pub_topic_sw2);
-            UART_PRINT("Data: %s\n\r",data_sw2);
-        }
-        else if(PUSH_BUTTON_SW3_PRESSED == RecvQue.event)
-        {
-            Button_IF_EnableInterrupt(SW3);
-            //
-            // send publish message
-            //
-            sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
-                    pub_topic_sw3,data_sw3,strlen((char*)data_sw3),QOS2,RETAIN);
-            UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
-            UART_PRINT("Topic: %s\n\r",pub_topic_sw3);
-            UART_PRINT("Data: %s\n\r",data_sw3);
-        }
-        else if(ANALOG_INPUTS == RecvQue.event)
+        if(ANALOG_INPUTS == RecvQue.event)
         {
             unsigned char* message = sendRegisterValues(0);
             //
@@ -926,9 +609,6 @@ connect_to_broker:
             //
             sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
                     PUB_TOPIC_AI, message,strlen((char*)message),QOS2,RETAIN);
-            UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
-            UART_PRINT("Topic: %s\n\r",PUB_TOPIC_AI);
-            UART_PRINT("Data: %s\n\r",message);
         }
         else if(ANALOG_OUTPUTS == RecvQue.event)
         {
@@ -939,9 +619,6 @@ connect_to_broker:
 
             sl_ExtLib_MqttClientSend((void*)local_con_conf[iCount].clt_ctx,
                     PUB_TOPIC_AO,message,strlen((char*) message),QOS2,RETAIN);
-            UART_PRINT("\n\r CC3200 Publishes the following message \n\r");
-            UART_PRINT("Topic: %s\n\r",PUB_TOPIC_AO);
-            UART_PRINT("Data: %s\n\r",message);
         }
         else if(BROKER_DISCONNECTION == RecvQue.event)
         {
@@ -951,9 +628,6 @@ connect_to_broker:
             
             if(!IS_CONNECTED(g_ulStatus))
             {
-                UART_PRINT("device has disconnected from AP \n\r");
-                
-                UART_PRINT("retry connection to the AP\n\r");
                 
                 while(!(IS_CONNECTED(g_ulStatus)) || !(IS_IP_ACQUIRED(g_ulStatus)))
                 {
@@ -976,7 +650,6 @@ end:
     // Deinitializating the client library
     //
     sl_ExtLib_MqttClientExit();
-    UART_PRINT("\n\r Exiting the Application\n\r");
     
     LOOP_FOREVER();
 }
@@ -995,10 +668,8 @@ end:
 //!
 //*****************************************************************************
 
-void ModbusTask( void *pvParameters )
-{
-    UART_PRINT("\r\nTCP Wait\r\n");
-    int value = osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
+void ModbusTask( void *pvParameters){
+    osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
     osi_SyncObjSignal(&sync_obj);
 
     SlSockAddrIn_t  sAddr;
@@ -1014,7 +685,6 @@ void ModbusTask( void *pvParameters )
     char g_cBsdBuf[BUF_SIZE];
     unsigned short usPort = 502;
 
-    UART_PRINT("\r\nTCP Task\r\n");
 reset_tcp:
 
     // filling the buffer
@@ -1115,36 +785,13 @@ reset_tcp:
     }
 }
 
-void vTestTask2( void *pvParameters )
-{
-    UART_PRINT("T2 Wait");
-   osi_SyncObjWait(&sync_obj, OSI_WAIT_FOREVER);
-   osi_SyncObjSignal(&sync_obj);
-   for( ;; )
-     {
-       /* Queue a message for the print task to display on the UART CONSOLE. */
-       UART_PRINT("\r\nTest Task 2!\n\r");
-       osi_Sleep(2000);
-     }
-}
+void ConnectToAP(void *pvParameters){
 
-OsiTaskHandle handle;
-
-void ConnectToAP(void *pvParameters ){
-
-    int value = osi_SyncObjCreate(&sync_obj);
+    osi_SyncObjCreate(&sync_obj);
 
     long lRetVal = -1;
     unsigned char policyVal;
 
-    UART_PRINT("\r\nConnect to AP\r\n");
-    //
-    // Configure LED
-    //
-    GPIO_IF_LedConfigure(LED1|LED2|LED3);
-
-    GPIO_IF_LedOff(MCU_RED_LED_GPIO);
-    GPIO_IF_LedOff(MCU_GREEN_LED_GPIO);
 
     //
     // Reset The state of the machine
@@ -1157,15 +804,8 @@ void ConnectToAP(void *pvParameters ){
     lRetVal = Network_IF_InitDriver(ROLE_STA);
     if(lRetVal < 0)
     {
-       UART_PRINT("Failed to start SimpleLink Device\n\r",lRetVal);
        LOOP_FOREVER();
     }
-
-    // switch on Green LED to indicate Simplelink is properly up
-    GPIO_IF_LedOn(MCU_ON_IND);
-
-    // Start Timer to blink Red LED till AP connection
-    LedTimerConfigNStart();
 
     // Initialize AP security params
     SecurityParams.Key = (signed char *)SECURITY_KEY;
@@ -1178,7 +818,6 @@ void ConnectToAP(void *pvParameters ){
     lRetVal = Network_IF_ConnectAP(SSID_NAME, SecurityParams);
     if(lRetVal < 0)
     {
-       UART_PRINT("Connection to an AP failed\n\r");
        LOOP_FOREVER();
     }
 
@@ -1189,24 +828,7 @@ void ConnectToAP(void *pvParameters ){
                       SL_CONNECTION_POLICY(1,0,0,0,0),
                       &policyVal, 1 /*PolicyValLen*/);
 
-    //
-    // Disable the LED blinking Timer as Device is connected to AP
-    //
-    LedTimerDeinitStop();
-
-    //
-    // Switch ON RED LED to indicate that Device acquired an IP
-    //
-    GPIO_IF_LedOn(MCU_IP_ALLOC_IND);
-
-    UtilsDelay(20000000);
-
-    GPIO_IF_LedOff(MCU_RED_LED_GPIO);
-    GPIO_IF_LedOff(MCU_ORANGE_LED_GPIO);
-    GPIO_IF_LedOff(MCU_GREEN_LED_GPIO);
-
-    value = osi_SyncObjSignal(&sync_obj);
-    UART_PRINT("\r\nFinished AP\r\n");
+    osi_SyncObjSignal(&sync_obj);
     osi_TaskDelete(&handle);
 }
 
@@ -1227,11 +849,6 @@ void main()
     // Configuring UART
     //
     InitTerm();
-
-    //
-    // Display Application Banner
-    //
-    DisplayBanner("MQTT_Client");
 
     InitPWMModules();
     ADCInit();
