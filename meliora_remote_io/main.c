@@ -828,11 +828,6 @@ void main()
     //
     PinMuxConfig();
 
-    //
-    // Configuring UART
-    //
-    InitTerm();
-
     InitPWMModules();
     ADCInit();
 
