@@ -100,7 +100,7 @@ typedef enum{
 #define TOPIC_DO                  "/cc3200/Meliora/do"
 #define TOPIC_AI                  "/cc3200/Meliora/ai"
 #define TOPIC_AO                  "/cc3200/Meliora/ao"
-#define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscalling"
+#define TOPIC_AI_AS               "/cc3200/Meliora/ai/autoscaling"
 #define TOPIC_AI_SI               "/cc3200/Meliora/ai/slopeintercept"
 #define TOPIC_AO_SI               "/cc3200/Meliora/ao/slopeintercept"
 #define TOPIC_UDMA                "/cc3200/Meliora/addressing"
@@ -740,7 +740,7 @@ reset_tcp:
         }
     }
 
-    // waits for 1000 packets from the connected TCP client
+    // waits for packets from the connected TCP client
     while (true)
     {
         iStatus = sl_Recv(iNewSockID, g_cBsdBuf, iTestBufLen, 0);
